@@ -1,7 +1,7 @@
 const TOKEN = import.meta.env.VITE_DROPBOX_TOKEN
 
 // List all folders in the main client directory
-export async function listClientFolders(path = '/HBCL First Initial App...') {
+export async function listClientFolders(path = '/HBCL First Initial Appointment Borrower') {
   const res = await fetch('https://api.dropboxapi.com/2/files/list_folder', {
     method: 'POST',
     headers: {

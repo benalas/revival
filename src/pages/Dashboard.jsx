@@ -131,7 +131,7 @@ export default function Dashboard({ onProcess }) {
           </div>
           <div className="flex-1">
             <p className="text-sm font-medium text-forest-700">Dropbox</p>
-            <p className="text-xs text-forest-500/70 mt-0.5">Reading from: <span className="font-mono text-forest-600">HBCL First Initial App.../</span></p>
+            <p className="text-xs text-forest-500/70 mt-0.5">Reading from: <span className="font-mono text-forest-600">HBCL First Initial Appointment Borrower</span></p>
             <p className="text-xs text-forest-400 mt-2">{clients.length} clients in database · Click "Process Dropbox Files" to sync</p>
           </div>
           <button onClick={onProcess} className="btn-secondary text-xs flex-shrink-0">
