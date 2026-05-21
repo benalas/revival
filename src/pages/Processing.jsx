@@ -3,14 +3,17 @@ import { Leaf, CheckCircle, AlertCircle } from 'lucide-react'
 import { listClientFolders, listFilesInFolder, downloadFileAsBase64 } from '../dropbox'
 import { supabase } from '../supabase'
 
+const TEST_LIMIT = 50 // Process only first 50 folders for test run
+
 export default function Processing({ onComplete }) {
-  const [steps, setSteps]       = useState([])
-  const [done, setDone]         = useState(false)
-  const [error, setError]       = useState(null)
-  const [pct, setPct]           = useState(0)
-  const [current, setCurrent]   = useState('')
-  const [total, setTotal]       = useState(0)
+  const [steps, setSteps]         = useState([])
+  const [done, setDone]           = useState(false)
+  const [error, setError]         = useState(null)
+  const [pct, setPct]             = useState(0)
+  const [total, setTotal]         = useState(0)
   const [processed, setProcessed] = useState(0)
+  const [saved, setSaved]         = useState(0)
+  const [skipped, setSkipped]     = useState(0)
   const ran = useRef(false)
 
   useEffect(() => {
@@ -20,91 +23,81 @@ export default function Processing({ onComplete }) {
   }, [])
 
   function addStep(msg) {
-    setSteps(prev => [...prev, msg])
-    setCurrent(msg)
+    setSteps(prev => [...prev.slice(-20), msg]) // Keep last 20 steps
   }
 
-  async function extractWithClaude(base64Pdf, folderName) {
-    try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [{
-            role: 'user',
-            content: [
-              {
-                type: 'document',
-                source: {
-                  type: 'base64',
-                  media_type: 'application/pdf',
-                  data: base64Pdf,
-                },
-              },
-              {
-                type: 'text',
-                text: `Extract the following information from this mortgage document and return ONLY a JSON object with no markdown or explanation:
-{
-  "name": "full name of applicant",
-  "phone": "phone number",
-  "address": "full address",
-  "income": "annual income as string like $65,000",
-  "credit_score": 650,
-  "loan_amount": "loan amount as string like $380,000",
-  "app_date": "date in YYYY-MM-DD format",
-  "outcome": "one of: preapproval, denied, closed, incomplete, unknown",
-  "denial_reason": "reason if denied, otherwise null",
-  "spanish": true or false based on Spanish surname or language in document
-}
-If a field cannot be found, use null. For outcome: if you see a preapproval letter with no closing docs use preapproval, if denied letter use denied, if closing/HUD docs use closed, if incomplete application use incomplete, otherwise unknown.`,
-              },
-            ],
-          }],
-        }),
-      })
-      const data = await response.json()
-      const text = data.content?.[0]?.text || '{}'
-      const clean = text.replace(/```json|```/g, '').trim()
-      return JSON.parse(clean)
-    } catch (e) {
-      return null
-    }
+  async function extractWithAI(base64Pdf) {
+    const response = await fetch('/api/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base64Pdf }),
+    })
+    if (!response.ok) throw new Error(`API error: ${response.status}`)
+    return await response.json()
   }
 
   async function runProcessing() {
     try {
-      // Step 1 — Connect to Dropbox
       addStep('Connecting to Dropbox...')
-      const folders = await listClientFolders()
-      setTotal(folders.length)
-      addStep(`Found ${folders.length} client folders`)
+      const allFolders = await listClientFolders()
+
+      // Get existing folder names from Supabase to skip already processed
+      const { data: existing } = await supabase
+        .from('clients')
+        .select('folder_name')
+      const existingNames = new Set((existing || []).map(c => c.folder_name))
+
+      // Filter out already processed, limit to TEST_LIMIT
+      const newFolders = allFolders
+        .filter(f => !existingNames.has(f.name))
+        .slice(0, TEST_LIMIT)
+
+      const totalFolders = newFolders.length
+      setTotal(totalFolders)
+
+      if (totalFolders === 0) {
+        addStep('All folders already processed — nothing new to add')
+        setDone(true)
+        setPct(100)
+        setTimeout(onComplete, 1500)
+        return
+      }
+
+      addStep(`Found ${allFolders.length} total folders · Processing ${totalFolders} new ones`)
       setPct(5)
 
-      // Clear existing non-closed clients
-      await supabase.from('clients').delete().neq('id', 0)
+      let savedCount = 0
+      let skippedCount = 0
 
-      // Step 2 — Process each folder
-      for (let i = 0; i < folders.length; i++) {
-        const folder = folders[i]
+      for (let i = 0; i < newFolders.length; i++) {
+        const folder = newFolders[i]
         const folderName = folder.name
-        setCurrent(`Processing: ${folderName}`)
         setProcessed(i + 1)
-        setPct(Math.round(5 + ((i / folders.length) * 90)))
+        setPct(Math.round(5 + ((i / totalFolders) * 90)))
 
         try {
           // Get PDFs in folder
           const files = await listFilesInFolder(folder.path_lower)
-          if (files.length === 0) continue
+          if (files.length === 0) {
+            addStep(`⚠ No PDFs: ${folderName}`)
+            skippedCount++
+            setSkipped(skippedCount)
+            continue
+          }
 
-          // Process first PDF (most likely the application)
+          // Download first PDF
           const firstFile = files[0]
           const base64 = await downloadFileAsBase64(firstFile.path_lower)
 
-          // Extract data with Claude AI
-          const extracted = await extractWithClaude(base64, folderName)
-          if (!extracted) continue
+          // Extract with AI via serverless function
+          const extracted = await extractWithAI(base64)
+
+          if (!extracted || extracted.error) {
+            addStep(`⚠ Skipped: ${folderName}`)
+            skippedCount++
+            setSkipped(skippedCount)
+            continue
+          }
 
           // Determine priority
           let priority = 'unknown'
@@ -113,16 +106,16 @@ If a field cannot be found, use null. For outcome: if you see a preapproval lett
           else if (extracted.outcome === 'closed') priority = 'archive'
 
           // Save to Supabase
-          await supabase.from('clients').insert({
+          const { error: insertError } = await supabase.from('clients').insert({
             name: extracted.name || folderName,
-            phone: extracted.phone,
-            address: extracted.address,
-            income: extracted.income,
-            credit_score: extracted.credit_score,
-            loan_amount: extracted.loan_amount,
-            app_date: extracted.app_date,
+            phone: extracted.phone || null,
+            address: extracted.address || null,
+            income: extracted.income || null,
+            credit_score: typeof extracted.credit_score === 'number' ? extracted.credit_score : null,
+            loan_amount: extracted.loan_amount || null,
+            app_date: extracted.app_date || null,
             outcome: extracted.outcome || 'unknown',
-            denial_reason: extracted.denial_reason,
+            denial_reason: extracted.denial_reason || null,
             spanish: extracted.spanish || false,
             notes: '',
             called: false,
@@ -130,16 +123,31 @@ If a field cannot be found, use null. For outcome: if you see a preapproval lett
             follow_up: null,
             folder_name: folderName,
           })
-          addStep(`✓ ${folderName}`)
+
+          if (insertError) {
+            addStep(`⚠ Save failed: ${folderName}`)
+            skippedCount++
+            setSkipped(skippedCount)
+          } else {
+            addStep(`✓ ${folderName}`)
+            savedCount++
+            setSaved(savedCount)
+          }
+
         } catch (folderError) {
-          addStep(`⚠ Skipped: ${folderName}`)
+          addStep(`⚠ Error: ${folderName}`)
+          skippedCount++
+          setSkipped(skippedCount)
         }
+
+        // Small delay to avoid rate limiting
+        await new Promise(r => setTimeout(r, 200))
       }
 
       setPct(100)
       setDone(true)
-      addStep(`Complete — ${folders.length} clients processed`)
-      setTimeout(onComplete, 1500)
+      addStep(`✓ Complete — ${savedCount} saved · ${skippedCount} skipped`)
+      setTimeout(onComplete, 2000)
 
     } catch (err) {
       setError(err.message)
@@ -151,8 +159,8 @@ If a field cannot be found, use null. For outcome: if you see a preapproval lett
       <div className="w-full max-w-md text-center card p-8">
         <AlertCircle size={32} className="text-rust-500 mx-auto mb-4" />
         <h2 className="font-display text-2xl text-forest-700 mb-2">Something went wrong</h2>
-        <p className="text-sm text-forest-500 mb-4">{error}</p>
-        <p className="text-xs text-forest-400">Check that your Dropbox token is valid and the folder name matches exactly.</p>
+        <p className="text-sm text-forest-500 mb-4 font-mono">{error}</p>
+        <p className="text-xs text-forest-400">Check that your Dropbox token and Anthropic API key are valid in Vercel.</p>
       </div>
     </div>
   )
@@ -172,32 +180,53 @@ If a field cannot be found, use null. For outcome: if you see a preapproval lett
         </h2>
         <p className="text-sm text-forest-500/70 mb-2">
           {done
-            ? `${total} clients extracted and categorized.`
-            : `Reading your Dropbox folders with AI — this may take a few minutes.`
+            ? `${saved} clients saved · ${skipped} skipped`
+            : `Reading Dropbox folders with AI — do not close this window`
           }
         </p>
+
         {!done && total > 0 && (
-          <p className="text-xs text-forest-400 mb-6">{processed} of {total} folders processed</p>
+          <div className="flex justify-center gap-6 mb-4">
+            <div className="text-center">
+              <p className="text-lg font-display text-forest-700">{processed}/{total}</p>
+              <p className="text-xs text-forest-400">processed</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-display text-forest-600">{saved}</p>
+              <p className="text-xs text-forest-400">saved</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-display text-gold-500">{skipped}</p>
+              <p className="text-xs text-forest-400">skipped</p>
+            </div>
+          </div>
         )}
 
         <div className="h-1.5 bg-cream-200 rounded-full overflow-hidden mb-4">
-          <div className="h-full bg-forest-500 rounded-full transition-all duration-500 ease-out" style={{ width: `${pct}%` }} />
+          <div className="h-full bg-forest-500 rounded-full transition-all duration-500 ease-out"
+            style={{ width: `${pct}%` }} />
         </div>
         <p className="text-xs font-mono text-forest-400 mb-6">{pct}% complete</p>
 
-        <div className="card p-5 text-left space-y-2 max-h-64 overflow-y-auto">
+        <div className="card p-5 text-left space-y-1.5 max-h-64 overflow-y-auto">
           {steps.length === 0 && (
             <p className="text-sm text-forest-400">Starting...</p>
           )}
           {steps.map((s, i) => (
-            <div key={i} className={`text-sm ${s.startsWith('✓') ? 'text-forest-500' : s.startsWith('⚠') ? 'text-gold-500' : 'text-forest-700'}`}>
+            <div key={i} className={`text-sm ${
+              s.startsWith('✓') ? 'text-forest-500' :
+              s.startsWith('⚠') ? 'text-gold-500' :
+              'text-forest-700 font-medium'
+            }`}>
               {s}
             </div>
           ))}
         </div>
 
         {!done && (
-          <p className="text-xs text-forest-400/60 mt-4">Do not close this window while processing</p>
+          <p className="text-xs text-forest-400/60 mt-4">
+            Test run — first {TEST_LIMIT} new folders only
+          </p>
         )}
       </div>
     </div>
