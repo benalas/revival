@@ -14,7 +14,7 @@ export default function App() {
   const [processing, setProcessing] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  function handleLogin() { setAuth(true); setProcessing(true) }
+  function handleLogin() { setAuth(true); setProcessed(true) }
   function handleProcessed() { setProcessing(false); setProcessed(true) }
   function handleLogout() { setAuth(false); setProcessed(false) }
   function handleReprocess() { setProcessing(true); setProcessed(false) }
