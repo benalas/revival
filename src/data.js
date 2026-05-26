@@ -27,6 +27,13 @@ export const OUTCOME_CONFIG = {
     priority: 'archive',
     description: 'Successfully funded',
   },
+  dnc: {
+    label: 'Do Not Call',
+    badge: 'badge-unknown',
+    dot: 'bg-rust-300',
+    priority: 'unknown',
+    description: 'Remove from outreach',
+  },
   unknown: {
     label: 'Unknown',
     badge: 'badge-unknown',

@@ -12,12 +12,10 @@ export default function ClientDetail() {
   const [saving, setSaving]   = useState(false)
   const [saved, setSaved]     = useState(false)
 
-  // Notes: saved history + current draft
-  const [noteHistory, setNoteHistory] = useState([]) // [{text, date}]
+  // Notes
+  const [noteHistory, setNoteHistory] = useState([])
   const [newNote, setNewNote]         = useState('')
   const [savingNote, setSavingNote]   = useState(false)
-
-  // Note editing
   const [editingNoteIndex, setEditingNoteIndex] = useState(null)
   const [editingNoteText, setEditingNoteText]   = useState('')
 
@@ -25,12 +23,17 @@ export default function ClientDetail() {
   const [status, setStatus]     = useState('')
   const [followUp, setFollowUp] = useState('')
   const [called, setCalled]     = useState(false)
+  const [reviewed, setReviewed] = useState(false)
 
-  // Inline editing
+  // Inline editing — header fields
   const [editName, setEditName]   = useState(false)
   const [editPhone, setEditPhone] = useState(false)
   const [nameVal, setNameVal]     = useState('')
   const [phoneVal, setPhoneVal]   = useState('')
+
+  // Inline editing — client info fields
+  const [editField, setEditField] = useState(null) // which field is being edited
+  const [editVal, setEditVal]     = useState('')
 
   useEffect(() => { fetchClient() }, [id])
 
@@ -41,6 +44,7 @@ export default function ClientDetail() {
       setStatus(data.outcome || 'unknown')
       setFollowUp(data.follow_up || '')
       setCalled(data.called || false)
+      setReviewed(data.reviewed || false)
       setNameVal(data.name || '')
       setPhoneVal(data.phone || '')
 
@@ -94,6 +98,7 @@ export default function ClientDetail() {
       outcome:   status,
       follow_up: followUp || null,
       called,
+      reviewed,
       priority: status === 'preapproval' ? 'fire' :
                 ['denied','incomplete'].includes(status) ? 'warm' :
                 status === 'closed' ? 'archive' : 'unknown',
@@ -115,6 +120,13 @@ export default function ClientDetail() {
     setEditPhone(false)
   }
 
+  async function saveField(field) {
+    await supabase.from('clients').update({ [field]: editVal || null }).eq('id', id)
+    setClient(prev => ({ ...prev, [field]: editVal }))
+    setEditField(null)
+    setEditVal('')
+  }
+
   function getDropboxWebUrl(dropboxPath) {
     if (!dropboxPath) return null
     return `https://www.dropbox.com/home${dropboxPath}`
@@ -127,14 +139,38 @@ export default function ClientDetail() {
     </div>
   )
 
-  const Field = ({ label, value }) => (
+  const dropboxUrl = getDropboxWebUrl(client.dropbox_path)
+
+  // Editable info field component
+  const EditableField = ({ label, fieldKey, value, type = 'text' }) => (
     <div>
-      <p className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-1">{label}</p>
-      <p className="text-sm font-medium text-forest-700">{value || '—'}</p>
+      <div className="flex items-center gap-1.5 mb-1">
+        <p className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">{label}</p>
+        {editField !== fieldKey && (
+          <button onClick={() => { setEditField(fieldKey); setEditVal(value || '') }}
+            className="text-forest-300 hover:text-forest-500 transition-colors">
+            <Edit2 size={11} />
+          </button>
+        )}
+      </div>
+      {editField === fieldKey ? (
+        <div className="flex items-center gap-1.5">
+          <input
+            type={type}
+            value={editVal}
+            onChange={e => setEditVal(e.target.value)}
+            className="input py-1 px-2 text-sm flex-1"
+            autoFocus
+            onKeyDown={e => { if (e.key === 'Enter') saveField(fieldKey); if (e.key === 'Escape') { setEditField(null); setEditVal('') } }}
+          />
+          <button onClick={() => saveField(fieldKey)} className="text-forest-500 hover:text-forest-700"><Check size={14}/></button>
+          <button onClick={() => { setEditField(null); setEditVal('') }} className="text-rust-400 hover:text-rust-600"><X size={14}/></button>
+        </div>
+      ) : (
+        <p className="text-sm font-medium text-forest-700">{value || '—'}</p>
+      )}
     </div>
   )
-
-  const dropboxUrl = getDropboxWebUrl(client.dropbox_path)
 
   return (
     <div className="p-6 lg:p-10 max-w-4xl mx-auto animate-fade-up">
@@ -200,16 +236,19 @@ export default function ClientDetail() {
       <div className="grid lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2 space-y-5">
 
-          {/* Client info */}
+          {/* Client info — all editable */}
           <div className="card p-6">
             <h2 className="font-display text-xl text-forest-700 mb-5">Client Information</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
-              <Field label="Credit Score"  value={client.credit_score} />
-              <Field label="Annual Income" value={client.income} />
-              <Field label="Loan Amount"   value={client.loan_amount} />
-              <Field label="Address"       value={client.address} />
-              <Field label="Applied"       value={client.app_date ? new Date(client.app_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : null} />
-              <Field label="Language"      value={client.spanish ? 'Spanish preferred' : 'English'} />
+              <EditableField label="Credit Score"  fieldKey="credit_score" value={client.credit_score} />
+              <EditableField label="Annual Income" fieldKey="income"       value={client.income} />
+              <EditableField label="Loan Amount"   fieldKey="loan_amount"  value={client.loan_amount} />
+              <EditableField label="Address"       fieldKey="address"      value={client.address} />
+              <EditableField label="Applied"       fieldKey="app_date"     value={client.app_date ? new Date(client.app_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : null} />
+              <div>
+                <p className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-1">Language</p>
+                <p className="text-sm font-medium text-forest-700">{client.spanish ? 'Spanish preferred' : 'English'}</p>
+              </div>
             </div>
             {client.denial_reason && (
               <div className="mt-5 p-3 bg-gold-400/10 border border-gold-300/30 rounded-xl">
@@ -222,8 +261,6 @@ export default function ClientDetail() {
           {/* Notes */}
           <div className="card p-6">
             <h2 className="font-display text-xl text-forest-700 mb-4">Notes</h2>
-
-            {/* New note input */}
             <div className="mb-4">
               <textarea
                 value={newNote}
@@ -241,14 +278,11 @@ export default function ClientDetail() {
               </button>
             </div>
 
-            {/* Note history */}
             {noteHistory.length > 0 && (
               <div className="space-y-2.5 border-t border-cream-200 pt-4">
                 <p className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Previous Notes</p>
                 {noteHistory.map((entry, i) => (
                   <div key={i} className="bg-cream-50 border border-cream-200 rounded-xl p-3">
-
-                    {/* Date + action buttons */}
                     <div className="flex items-center justify-between mb-1.5">
                       <div className="flex items-center gap-1.5 text-xs text-forest-400">
                         <Clock size={11} />
@@ -256,21 +290,17 @@ export default function ClientDetail() {
                       </div>
                       {editingNoteIndex !== i && (
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => { setEditingNoteIndex(i); setEditingNoteText(entry.text) }}
+                          <button onClick={() => { setEditingNoteIndex(i); setEditingNoteText(entry.text) }}
                             className="text-forest-400 hover:text-forest-600 transition-colors">
                             <Edit2 size={13} />
                           </button>
-                          <button
-                            onClick={() => handleDeleteNote(i)}
+                          <button onClick={() => handleDeleteNote(i)}
                             className="text-forest-400 hover:text-rust-500 transition-colors">
                             <Trash2 size={13} />
                           </button>
                         </div>
                       )}
                     </div>
-
-                    {/* Note text or edit mode */}
                     {editingNoteIndex === i ? (
                       <div>
                         <textarea
@@ -281,13 +311,11 @@ export default function ClientDetail() {
                           autoFocus
                         />
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleSaveEditedNote(i)}
+                          <button onClick={() => handleSaveEditedNote(i)}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-forest-600 hover:bg-forest-700 text-white text-xs font-medium rounded-lg transition-colors">
                             <Check size={12} /> Save
                           </button>
-                          <button
-                            onClick={() => { setEditingNoteIndex(null); setEditingNoteText('') }}
+                          <button onClick={() => { setEditingNoteIndex(null); setEditingNoteText('') }}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-cream-200 hover:bg-cream-300 text-forest-600 text-xs font-medium rounded-lg transition-colors">
                             <X size={12} /> Cancel
                           </button>
@@ -306,6 +334,7 @@ export default function ClientDetail() {
         {/* Right sidebar */}
         <div className="space-y-5">
 
+          {/* Called toggle */}
           <div className="card p-5">
             <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Contact Status</h3>
             <button onClick={() => setCalled(!called)}
@@ -314,6 +343,16 @@ export default function ClientDetail() {
             </button>
           </div>
 
+          {/* Reviewed toggle */}
+          <div className="card p-5">
+            <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Review Status</h3>
+            <button onClick={() => setReviewed(!reviewed)}
+              className={`w-full py-2.5 rounded-xl text-sm font-medium border transition-all ${reviewed ? 'bg-forest-500 text-white border-forest-500' : 'bg-white text-forest-600 border-cream-200 hover:border-forest-300'}`}>
+              {reviewed ? '✓ Reviewed' : 'Mark as Reviewed'}
+            </button>
+          </div>
+
+          {/* Status */}
           <div className="card p-5">
             <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Status</h3>
             <div className="space-y-2">
@@ -326,6 +365,7 @@ export default function ClientDetail() {
             </div>
           </div>
 
+          {/* Follow up */}
           <div className="card p-5">
             <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Follow-up Date</h3>
             <input type="date" value={followUp} onChange={e => setFollowUp(e.target.value)}
@@ -337,6 +377,7 @@ export default function ClientDetail() {
             )}
           </div>
 
+          {/* Save button */}
           <button onClick={handleSave} disabled={saving}
             className={`w-full py-3 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 ${saved ? 'bg-forest-500 text-white' : 'bg-gray-900 hover:bg-gray-800 text-white'}`}>
             <Save size={14} />

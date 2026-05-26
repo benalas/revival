@@ -1,24 +1,36 @@
 import { useState, useEffect } from 'react'
-import { Search, Globe, ChevronRight } from 'lucide-react'
+import { Search, Globe, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react'
 import { OUTCOME_CONFIG } from '../data'
 import { supabase } from '../supabase'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 const FILTERS = [
-  { key: 'all',     label: 'All Clients' },
-  { key: 'fire',    label: '🔥 Priority' },
-  { key: 'warm',    label: '🟡 Follow Up' },
-  { key: 'archive', label: '✅ Closed' },
-  { key: 'spanish', label: '🇪🇸 Spanish' },
+  { key: 'all',      label: 'All Clients' },
+  { key: 'fire',     label: '🔥 Priority' },
+  { key: 'warm',     label: '🟡 Follow Up' },
+  { key: 'archive',  label: '✅ Closed' },
+  { key: 'spanish',  label: '🇪🇸 Spanish' },
+  { key: 'reviewed', label: '👁 Reviewed' },
+  { key: 'dnc',      label: '🚫 Do Not Call' },
+]
+
+const COLUMNS = [
+  { key: 'name',         label: 'Client' },
+  { key: 'phone',        label: 'Phone' },
+  { key: 'credit_score', label: 'Credit Score' },
+  { key: 'outcome',      label: 'Outcome' },
+  { key: 'app_date',     label: 'Applied' },
 ]
 
 export default function Clients() {
-  const [search, setSearch]   = useState('')
-  const [filter, setFilter]   = useState('all')
-  const [clients, setClients] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [searchParams]        = useSearchParams()
-  const navigate              = useNavigate()
+  const [search, setSearch]     = useState('')
+  const [filter, setFilter]     = useState('all')
+  const [clients, setClients]   = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [sortKey, setSortKey]   = useState('name')
+  const [sortDir, setSortDir]   = useState('asc')
+  const [searchParams]          = useSearchParams()
+  const navigate                = useNavigate()
 
   useEffect(() => {
     const f = searchParams.get('filter')
@@ -28,24 +40,67 @@ export default function Clients() {
 
   async function fetchClients() {
     setLoading(true)
-    const { data } = await supabase.from('clients').select('*').order('name')
+    const { data } = await supabase.from('clients').select('*')
     setClients(data || [])
     setLoading(false)
   }
 
-  const filtered = clients.filter(c => {
-    const matchSearch =
-      c.name?.toLowerCase().includes(search.toLowerCase()) ||
-      c.phone?.includes(search) ||
-      c.address?.toLowerCase().includes(search.toLowerCase())
-    const matchFilter =
-      filter === 'all'     ? true :
-      filter === 'fire'    ? c.priority === 'fire' :
-      filter === 'warm'    ? c.priority === 'warm' :
-      filter === 'archive' ? c.outcome === 'closed' :
-      filter === 'spanish' ? c.spanish : true
-    return matchSearch && matchFilter
-  })
+  function handleSort(key) {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  const filtered = clients
+    .filter(c => {
+      const matchSearch =
+        c.name?.toLowerCase().includes(search.toLowerCase()) ||
+        c.phone?.includes(search) ||
+        c.address?.toLowerCase().includes(search.toLowerCase())
+      const matchFilter =
+        filter === 'all'      ? true :
+        filter === 'fire'     ? c.priority === 'fire' :
+        filter === 'warm'     ? c.priority === 'warm' :
+        filter === 'archive'  ? c.outcome === 'closed' :
+        filter === 'spanish'  ? c.spanish :
+        filter === 'reviewed' ? c.reviewed :
+        filter === 'dnc'      ? c.outcome === 'dnc' : true
+      return matchSearch && matchFilter
+    })
+    .sort((a, b) => {
+      let aVal = a[sortKey]
+      let bVal = b[sortKey]
+
+      // Handle nulls — push to bottom always
+      if (aVal == null && bVal == null) return 0
+      if (aVal == null) return 1
+      if (bVal == null) return -1
+
+      if (sortKey === 'credit_score') {
+        aVal = parseInt(aVal) || 0
+        bVal = parseInt(bVal) || 0
+      } else if (sortKey === 'app_date') {
+        aVal = new Date(aVal)
+        bVal = new Date(bVal)
+      } else {
+        aVal = aVal.toString().toLowerCase()
+        bVal = bVal.toString().toLowerCase()
+      }
+
+      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
+      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+
+  const SortIcon = ({ colKey }) => {
+    if (sortKey !== colKey) return <ChevronUp size={12} className="text-forest-300/50" />
+    return sortDir === 'asc'
+      ? <ChevronUp size={12} className="text-forest-500" />
+      : <ChevronDown size={12} className="text-forest-500" />
+  }
 
   return (
     <div className="p-6 lg:p-10 max-w-6xl mx-auto">
@@ -76,10 +131,15 @@ export default function Clients() {
       </div>
 
       <div className="card overflow-hidden animate-fade-up animate-delay-200">
+        {/* Sortable column headers */}
         <div className="hidden lg:grid grid-cols-[2.5fr_1.2fr_1fr_1.2fr_1fr_0.5fr] gap-4 px-6 py-3 bg-cream-100/60 border-b border-cream-200">
-          {['Client', 'Phone', 'Credit Score', 'Outcome', 'Applied', ''].map(h => (
-            <span key={h} className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">{h}</span>
+          {COLUMNS.map(col => (
+            <button key={col.key} onClick={() => handleSort(col.key)}
+              className="flex items-center gap-1 text-xs font-medium text-forest-500/60 uppercase tracking-wider hover:text-forest-600 transition-colors text-left">
+              {col.label} <SortIcon colKey={col.key} />
+            </button>
           ))}
+          <span className="text-xs font-medium text-forest-500/60 uppercase tracking-wider"></span>
         </div>
 
         {loading && <div className="py-20 text-center text-sm text-forest-400">Loading clients...</div>}
@@ -97,17 +157,20 @@ export default function Clients() {
 
         {!loading && filtered.map(client => {
           const outcome = OUTCOME_CONFIG[client.outcome] || OUTCOME_CONFIG.unknown
+          const isDnc = client.outcome === 'dnc'
           return (
             <div key={client.id} onClick={() => navigate(`/clients/${client.id}`)}
-              className="grid lg:grid-cols-[2.5fr_1.2fr_1fr_1.2fr_1fr_0.5fr] gap-4 px-6 py-4 border-b border-cream-100 last:border-0 hover:bg-cream-50/80 cursor-pointer transition-colors items-center">
+              className={`grid lg:grid-cols-[2.5fr_1.2fr_1fr_1.2fr_1fr_0.5fr] gap-4 px-6 py-4 border-b border-cream-100 last:border-0 hover:bg-cream-50/80 cursor-pointer transition-colors items-center ${isDnc ? 'opacity-50' : ''}`}>
               <div className="flex items-center gap-3 min-w-0">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-display text-sm ${client.priority === 'fire' ? 'bg-rust-400/15 text-rust-500' : 'bg-forest-400/10 text-forest-600'}`}>
                   {client.name?.charAt(0)}
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-sm font-medium text-forest-700">{client.name}</span>
+                    <span className={`text-sm font-medium text-forest-700 ${isDnc ? 'line-through' : ''}`}>{client.name}</span>
                     {client.spanish && <span className="text-xs bg-forest-400/10 text-forest-500 border border-forest-400/20 px-1.5 py-0.5 rounded-full flex items-center gap-0.5"><Globe size={9}/> ES</span>}
+                    {client.reviewed && <span className="text-xs bg-forest-400/10 text-forest-500 border border-forest-400/20 px-1.5 py-0.5 rounded-full">✓</span>}
+                    {isDnc && <span className="text-xs bg-rust-400/10 text-rust-500 border border-rust-400/20 px-1.5 py-0.5 rounded-full">🚫 DNC</span>}
                   </div>
                   <p className="text-xs text-forest-500/50 truncate">{client.address || '—'}</p>
                 </div>
