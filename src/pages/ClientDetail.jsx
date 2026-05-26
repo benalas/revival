@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Globe, Save, Mail, Edit2, Check, X, FileText, Plus, Clock } from 'lucide-react'
+import { ArrowLeft, Globe, Save, Mail, Edit2, Check, X, FileText, Plus, Clock, Trash2 } from 'lucide-react'
 import { OUTCOME_CONFIG } from '../data'
 import { supabase } from '../supabase'
 
@@ -16,6 +16,10 @@ export default function ClientDetail() {
   const [noteHistory, setNoteHistory] = useState([]) // [{text, date}]
   const [newNote, setNewNote]         = useState('')
   const [savingNote, setSavingNote]   = useState(false)
+
+  // Note editing
+  const [editingNoteIndex, setEditingNoteIndex] = useState(null)
+  const [editingNoteText, setEditingNoteText]   = useState('')
 
   // Other editable fields
   const [status, setStatus]     = useState('')
@@ -40,15 +44,20 @@ export default function ClientDetail() {
       setNameVal(data.name || '')
       setPhoneVal(data.phone || '')
 
-      // Parse note history from JSON field, fallback to old plain-text notes
       if (data.note_history) {
         try { setNoteHistory(JSON.parse(data.note_history)) } catch { setNoteHistory([]) }
       } else if (data.notes) {
-        // Migrate old plain-text note into history
         setNoteHistory([{ text: data.notes, date: data.updated_at || new Date().toISOString() }])
       }
     }
     setLoading(false)
+  }
+
+  async function persistNotes(updated) {
+    await supabase.from('clients').update({
+      note_history: JSON.stringify(updated),
+      notes: updated[0]?.text || ''
+    }).eq('id', id)
   }
 
   async function handleSaveNote() {
@@ -56,10 +65,27 @@ export default function ClientDetail() {
     setSavingNote(true)
     const entry = { text: newNote.trim(), date: new Date().toISOString() }
     const updated = [entry, ...noteHistory]
-    await supabase.from('clients').update({ note_history: JSON.stringify(updated), notes: newNote.trim() }).eq('id', id)
+    await persistNotes(updated)
     setNoteHistory(updated)
     setNewNote('')
     setSavingNote(false)
+  }
+
+  async function handleDeleteNote(index) {
+    const updated = noteHistory.filter((_, i) => i !== index)
+    await persistNotes(updated)
+    setNoteHistory(updated)
+  }
+
+  async function handleSaveEditedNote(index) {
+    if (!editingNoteText.trim()) return
+    const updated = noteHistory.map((entry, i) =>
+      i === index ? { ...entry, text: editingNoteText.trim() } : entry
+    )
+    await persistNotes(updated)
+    setNoteHistory(updated)
+    setEditingNoteIndex(null)
+    setEditingNoteText('')
   }
 
   async function handleSave() {
@@ -89,11 +115,8 @@ export default function ClientDetail() {
     setEditPhone(false)
   }
 
-  // Generate a Dropbox shared link from a stored path
   function getDropboxWebUrl(dropboxPath) {
     if (!dropboxPath) return null
-    // Convert /path/to/file.pdf → Dropbox web viewer URL
-    const encoded = encodeURIComponent(dropboxPath)
     return `https://www.dropbox.com/home${dropboxPath}`
   }
 
@@ -103,8 +126,6 @@ export default function ClientDetail() {
       Client not found. <button onClick={() => navigate('/clients')} className="underline">Go back</button>
     </div>
   )
-
-  const outcome = OUTCOME_CONFIG[status] || OUTCOME_CONFIG.unknown
 
   const Field = ({ label, value }) => (
     <div>
@@ -128,7 +149,6 @@ export default function ClientDetail() {
             {client.name?.charAt(0)}
           </div>
           <div>
-            {/* Editable name */}
             <div className="flex items-center gap-2 mb-1">
               {editName ? (
                 <div className="flex items-center gap-2">
@@ -145,7 +165,6 @@ export default function ClientDetail() {
                 </div>
               )}
             </div>
-            {/* Editable phone */}
             <div className="flex items-center gap-2">
               {editPhone ? (
                 <div className="flex items-center gap-2">
@@ -164,10 +183,8 @@ export default function ClientDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Dropbox PDF link */}
           {dropboxUrl && (
-            <a href={dropboxUrl} target="_blank" rel="noopener noreferrer"
-              className="btn-secondary">
+            <a href={dropboxUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary">
               <FileText size={14} /> View PDF
             </a>
           )}
@@ -183,7 +200,7 @@ export default function ClientDetail() {
       <div className="grid lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2 space-y-5">
 
-          {/* Extracted info */}
+          {/* Client info */}
           <div className="card p-6">
             <h2 className="font-display text-xl text-forest-700 mb-5">Client Information</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
@@ -230,11 +247,55 @@ export default function ClientDetail() {
                 <p className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Previous Notes</p>
                 {noteHistory.map((entry, i) => (
                   <div key={i} className="bg-cream-50 border border-cream-200 rounded-xl p-3">
-                    <div className="flex items-center gap-1.5 text-xs text-forest-400 mb-1.5">
-                      <Clock size={11} />
-                      {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+
+                    {/* Date + action buttons */}
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-1.5 text-xs text-forest-400">
+                        <Clock size={11} />
+                        {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      </div>
+                      {editingNoteIndex !== i && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => { setEditingNoteIndex(i); setEditingNoteText(entry.text) }}
+                            className="text-forest-400 hover:text-forest-600 transition-colors">
+                            <Edit2 size={13} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteNote(i)}
+                            className="text-forest-400 hover:text-rust-500 transition-colors">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <p className="text-sm text-forest-700 whitespace-pre-wrap">{entry.text}</p>
+
+                    {/* Note text or edit mode */}
+                    {editingNoteIndex === i ? (
+                      <div>
+                        <textarea
+                          value={editingNoteText}
+                          onChange={e => setEditingNoteText(e.target.value)}
+                          rows={3}
+                          className="input resize-none mb-2 text-sm"
+                          autoFocus
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleSaveEditedNote(i)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-forest-600 hover:bg-forest-700 text-white text-xs font-medium rounded-lg transition-colors">
+                            <Check size={12} /> Save
+                          </button>
+                          <button
+                            onClick={() => { setEditingNoteIndex(null); setEditingNoteText('') }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-cream-200 hover:bg-cream-300 text-forest-600 text-xs font-medium rounded-lg transition-colors">
+                            <X size={12} /> Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-forest-700 whitespace-pre-wrap">{entry.text}</p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -245,7 +306,6 @@ export default function ClientDetail() {
         {/* Right sidebar */}
         <div className="space-y-5">
 
-          {/* Called toggle */}
           <div className="card p-5">
             <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Contact Status</h3>
             <button onClick={() => setCalled(!called)}
@@ -254,7 +314,6 @@ export default function ClientDetail() {
             </button>
           </div>
 
-          {/* Status */}
           <div className="card p-5">
             <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Status</h3>
             <div className="space-y-2">
@@ -267,7 +326,6 @@ export default function ClientDetail() {
             </div>
           </div>
 
-          {/* Follow up */}
           <div className="card p-5">
             <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Follow-up Date</h3>
             <input type="date" value={followUp} onChange={e => setFollowUp(e.target.value)}
@@ -279,7 +337,6 @@ export default function ClientDetail() {
             )}
           </div>
 
-          {/* Save button */}
           <button onClick={handleSave} disabled={saving}
             className={`w-full py-3 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 ${saved ? 'bg-forest-500 text-white' : 'bg-gray-900 hover:bg-gray-800 text-white'}`}>
             <Save size={14} />
