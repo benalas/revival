@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Globe, Save, Mail, Edit2, Check, X } from 'lucide-react'
+import { ArrowLeft, Globe, Save, Mail, Edit2, Check, X, FileText, Plus, Clock } from 'lucide-react'
 import { OUTCOME_CONFIG } from '../data'
 import { supabase } from '../supabase'
 
@@ -12,11 +12,15 @@ export default function ClientDetail() {
   const [saving, setSaving]   = useState(false)
   const [saved, setSaved]     = useState(false)
 
-  // Editable fields
-  const [notes, setNotes]         = useState('')
-  const [status, setStatus]       = useState('')
-  const [followUp, setFollowUp]   = useState('')
-  const [called, setCalled]       = useState(false)
+  // Notes: saved history + current draft
+  const [noteHistory, setNoteHistory] = useState([]) // [{text, date}]
+  const [newNote, setNewNote]         = useState('')
+  const [savingNote, setSavingNote]   = useState(false)
+
+  // Other editable fields
+  const [status, setStatus]     = useState('')
+  const [followUp, setFollowUp] = useState('')
+  const [called, setCalled]     = useState(false)
 
   // Inline editing
   const [editName, setEditName]   = useState(false)
@@ -30,20 +34,37 @@ export default function ClientDetail() {
     const { data } = await supabase.from('clients').select('*').eq('id', id).single()
     if (data) {
       setClient(data)
-      setNotes(data.notes || '')
       setStatus(data.outcome || 'unknown')
       setFollowUp(data.follow_up || '')
       setCalled(data.called || false)
       setNameVal(data.name || '')
       setPhoneVal(data.phone || '')
+
+      // Parse note history from JSON field, fallback to old plain-text notes
+      if (data.note_history) {
+        try { setNoteHistory(JSON.parse(data.note_history)) } catch { setNoteHistory([]) }
+      } else if (data.notes) {
+        // Migrate old plain-text note into history
+        setNoteHistory([{ text: data.notes, date: data.updated_at || new Date().toISOString() }])
+      }
     }
     setLoading(false)
+  }
+
+  async function handleSaveNote() {
+    if (!newNote.trim()) return
+    setSavingNote(true)
+    const entry = { text: newNote.trim(), date: new Date().toISOString() }
+    const updated = [entry, ...noteHistory]
+    await supabase.from('clients').update({ note_history: JSON.stringify(updated), notes: newNote.trim() }).eq('id', id)
+    setNoteHistory(updated)
+    setNewNote('')
+    setSavingNote(false)
   }
 
   async function handleSave() {
     setSaving(true)
     await supabase.from('clients').update({
-      notes,
       outcome:   status,
       follow_up: followUp || null,
       called,
@@ -68,6 +89,14 @@ export default function ClientDetail() {
     setEditPhone(false)
   }
 
+  // Generate a Dropbox shared link from a stored path
+  function getDropboxWebUrl(dropboxPath) {
+    if (!dropboxPath) return null
+    // Convert /path/to/file.pdf → Dropbox web viewer URL
+    const encoded = encodeURIComponent(dropboxPath)
+    return `https://www.dropbox.com/home${dropboxPath}`
+  }
+
   if (loading) return <div className="p-10 text-center text-forest-400">Loading...</div>
   if (!client) return (
     <div className="p-10 text-center text-forest-400">
@@ -83,6 +112,8 @@ export default function ClientDetail() {
       <p className="text-sm font-medium text-forest-700">{value || '—'}</p>
     </div>
   )
+
+  const dropboxUrl = getDropboxWebUrl(client.dropbox_path)
 
   return (
     <div className="p-6 lg:p-10 max-w-4xl mx-auto animate-fade-up">
@@ -132,13 +163,21 @@ export default function ClientDetail() {
             </div>
           </div>
         </div>
-        {/* Email button */}
-        {client.phone && (
-          <a href={`mailto:?subject=Mortgage Follow Up - ${client.name}&body=Hi ${client.name?.split(' ')[0]},`}
-            className="btn-secondary flex-shrink-0">
-            <Mail size={14} /> Send Email
-          </a>
-        )}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Dropbox PDF link */}
+          {dropboxUrl && (
+            <a href={dropboxUrl} target="_blank" rel="noopener noreferrer"
+              className="btn-secondary">
+              <FileText size={14} /> View PDF
+            </a>
+          )}
+          {client.phone && (
+            <a href={`mailto:?subject=Mortgage Follow Up - ${client.name}&body=Hi ${client.name?.split(' ')[0]},`}
+              className="btn-secondary">
+              <Mail size={14} /> Send Email
+            </a>
+          )}
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-5">
@@ -166,9 +205,40 @@ export default function ClientDetail() {
           {/* Notes */}
           <div className="card p-6">
             <h2 className="font-display text-xl text-forest-700 mb-4">Notes</h2>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4}
-              placeholder="Add notes about this client, call outcomes, next steps..."
-              className="input resize-none mb-3" />
+
+            {/* New note input */}
+            <div className="mb-4">
+              <textarea
+                value={newNote}
+                onChange={e => setNewNote(e.target.value)}
+                rows={3}
+                placeholder="Add a new note — call outcomes, next steps, anything relevant..."
+                className="input resize-none mb-2"
+              />
+              <button
+                onClick={handleSaveNote}
+                disabled={savingNote || !newNote.trim()}
+                className="flex items-center gap-1.5 px-4 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-40 text-white text-sm font-medium rounded-xl transition-colors">
+                <Plus size={14} />
+                {savingNote ? 'Saving...' : 'Save Note'}
+              </button>
+            </div>
+
+            {/* Note history */}
+            {noteHistory.length > 0 && (
+              <div className="space-y-2.5 border-t border-cream-200 pt-4">
+                <p className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Previous Notes</p>
+                {noteHistory.map((entry, i) => (
+                  <div key={i} className="bg-cream-50 border border-cream-200 rounded-xl p-3">
+                    <div className="flex items-center gap-1.5 text-xs text-forest-400 mb-1.5">
+                      <Clock size={11} />
+                      {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    </div>
+                    <p className="text-sm text-forest-700 whitespace-pre-wrap">{entry.text}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

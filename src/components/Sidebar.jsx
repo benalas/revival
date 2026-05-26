@@ -32,7 +32,7 @@ export default function Sidebar({ open, onClose, onLogout, user }) {
           {NAV.map(({ to, icon: Icon, label }) => (
             <NavLink key={to} to={to} end={to === '/'} onClick={onClose}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${isActive ? 'bg-forest-500/60 text-cream-50' : 'text-forest-300 hover:bg-forest-600/40 hover:text-cream-50'}`
+                `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${isActive ? 'bg-forest-500/60 text-cream-50' : 'text-cream-100/80 hover:bg-forest-600/40 hover:text-cream-50'}`
               }>
               <Icon size={16} />
               {label}
