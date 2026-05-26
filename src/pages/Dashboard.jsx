@@ -50,7 +50,9 @@ export default function Dashboard() {
     .map(c => {
       try {
         const history = JSON.parse(c.note_history)
-        return { ...c, _lastNote: history[0] }
+        const lastNote = Array.isArray(history) ? history.find(n => n && n.date && n.text) : null
+        if (!lastNote) return null
+        return { ...c, _lastNote: lastNote }
       } catch { return null }
     })
     .filter(Boolean)
