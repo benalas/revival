@@ -13,10 +13,53 @@ function getGreeting() {
 
 export default function Dashboard() {
   const [clients, setClients] = useState([])
+  const [newNotesAlert, setNewNotesAlert] = useState([])
+  const [dismissedAlert, setDismissedAlert] = useState(false)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
-  useEffect(() => { fetchClients() }, [])
+  useEffect(() => {
+    fetchClients()
+    checkNewNotes()
+  }, [])
+
+  async function checkNewNotes() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    // Get last login time from user metadata
+    const lastLogin = user.last_sign_in_at
+    if (!lastLogin) return
+
+    // Find all clients with notes added after last login by someone else
+    const { data: allClients } = await supabase
+      .from('clients')
+      .select('id, name, note_history')
+      .not('note_history', 'is', null)
+
+    if (!allClients) return
+
+    const newNotes = []
+    for (const client of allClients) {
+      try {
+        const history = JSON.parse(client.note_history)
+        const recentByOther = history.filter(n =>
+          n && n.date && n.author &&
+          n.author !== user.email &&
+          new Date(n.date) > new Date(lastLogin)
+        )
+        if (recentByOther.length > 0) {
+          newNotes.push({
+            clientId: client.id,
+            clientName: client.name,
+            author: recentByOther[0].author,
+            count: recentByOther.length
+          })
+        }
+      } catch { continue }
+    }
+    setNewNotesAlert(newNotes)
+  }
 
   async function fetchClients() {
     setLoading(true)
@@ -112,6 +155,25 @@ export default function Dashboard() {
           View All Clients <ChevronRight size={14} />
         </button>
       </div>
+
+      {/* New notes alert banner */}
+      {!dismissedAlert && newNotesAlert.length > 0 && (
+        <div className="mb-6 bg-forest-500/10 border border-forest-400/30 rounded-2xl p-4 flex items-start justify-between gap-4 animate-fade-up">
+          <div>
+            <p className="text-sm font-medium text-forest-700 mb-1">📝 New notes while you were away</p>
+            <div className="space-y-1">
+              {newNotesAlert.map((n, i) => (
+                <button key={i} onClick={() => navigate(`/clients/${n.clientId}`)}
+                  className="block text-xs text-forest-600 hover:text-forest-800 hover:underline text-left">
+                  {n.author} left {n.count === 1 ? 'a note' : `${n.count} notes`} on <span className="font-medium">{n.clientName}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <button onClick={() => setDismissedAlert(true)}
+            className="text-forest-400 hover:text-forest-600 flex-shrink-0 text-lg leading-none">×</button>
+        </div>
+      )}
 
       {/* Clickable stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

@@ -11,31 +11,35 @@ export default function ClientDetail() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving]   = useState(false)
   const [saved, setSaved]     = useState(false)
+  const [currentUser, setCurrentUser] = useState(null)
 
-  // Notes
   const [noteHistory, setNoteHistory] = useState([])
   const [newNote, setNewNote]         = useState('')
   const [savingNote, setSavingNote]   = useState(false)
   const [editingNoteIndex, setEditingNoteIndex] = useState(null)
   const [editingNoteText, setEditingNoteText]   = useState('')
 
-  // Other editable fields
   const [status, setStatus]     = useState('')
   const [followUp, setFollowUp] = useState('')
   const [called, setCalled]     = useState(false)
   const [reviewed, setReviewed] = useState(false)
 
-  // Inline editing — header fields
   const [editName, setEditName]   = useState(false)
   const [editPhone, setEditPhone] = useState(false)
   const [nameVal, setNameVal]     = useState('')
   const [phoneVal, setPhoneVal]   = useState('')
-
-  // Inline editing — client info fields
-  const [editField, setEditField] = useState(null) // which field is being edited
+  const [editField, setEditField] = useState(null)
   const [editVal, setEditVal]     = useState('')
 
-  useEffect(() => { fetchClient() }, [id])
+  useEffect(() => {
+    fetchUser()
+    fetchClient()
+  }, [id])
+
+  async function fetchUser() {
+    const { data: { user } } = await supabase.auth.getUser()
+    setCurrentUser(user)
+  }
 
   async function fetchClient() {
     const { data } = await supabase.from('clients').select('*').eq('id', id).single()
@@ -51,7 +55,7 @@ export default function ClientDetail() {
       if (data.note_history) {
         try { setNoteHistory(JSON.parse(data.note_history)) } catch { setNoteHistory([]) }
       } else if (data.notes) {
-        setNoteHistory([{ text: data.notes, date: data.updated_at || new Date().toISOString() }])
+        setNoteHistory([{ text: data.notes, date: data.updated_at || new Date().toISOString(), author: 'Unknown' }])
       }
     }
     setLoading(false)
@@ -67,7 +71,11 @@ export default function ClientDetail() {
   async function handleSaveNote() {
     if (!newNote.trim()) return
     setSavingNote(true)
-    const entry = { text: newNote.trim(), date: new Date().toISOString() }
+    const entry = {
+      text: newNote.trim(),
+      date: new Date().toISOString(),
+      author: currentUser?.email || 'Unknown'
+    }
     const updated = [entry, ...noteHistory]
     await persistNotes(updated)
     setNoteHistory(updated)
@@ -141,8 +149,7 @@ export default function ClientDetail() {
 
   const dropboxUrl = getDropboxWebUrl(client.dropbox_path)
 
-  // Editable info field component
-  const EditableField = ({ label, fieldKey, value, type = 'text' }) => (
+  const EditableField = ({ label, fieldKey, value }) => (
     <div>
       <div className="flex items-center gap-1.5 mb-1">
         <p className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">{label}</p>
@@ -156,7 +163,7 @@ export default function ClientDetail() {
       {editField === fieldKey ? (
         <div className="flex items-center gap-1.5">
           <input
-            type={type}
+            type="text"
             value={editVal}
             onChange={e => setEditVal(e.target.value)}
             className="input py-1 px-2 text-sm flex-1"
@@ -178,7 +185,6 @@ export default function ClientDetail() {
         <ArrowLeft size={15} /> Back to clients
       </button>
 
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-8">
         <div className="flex items-center gap-4">
           <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-display text-2xl flex-shrink-0 ${client.priority === 'fire' ? 'bg-rust-400/15 text-rust-500' : 'bg-forest-400/10 text-forest-600'}`}>
@@ -236,7 +242,6 @@ export default function ClientDetail() {
       <div className="grid lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2 space-y-5">
 
-          {/* Client info — all editable */}
           <div className="card p-6">
             <h2 className="font-display text-xl text-forest-700 mb-5">Client Information</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
@@ -258,7 +263,6 @@ export default function ClientDetail() {
             )}
           </div>
 
-          {/* Notes */}
           <div className="card p-6">
             <h2 className="font-display text-xl text-forest-700 mb-4">Notes</h2>
             <div className="mb-4">
@@ -286,6 +290,8 @@ export default function ClientDetail() {
                     <div className="flex items-center justify-between mb-1.5">
                       <div className="flex items-center gap-1.5 text-xs text-forest-400">
                         <Clock size={11} />
+                        <span className="font-medium text-forest-500">{entry.author || 'Unknown'}</span>
+                        <span>·</span>
                         {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
                       </div>
                       {editingNoteIndex !== i && (
@@ -331,10 +337,7 @@ export default function ClientDetail() {
           </div>
         </div>
 
-        {/* Right sidebar */}
         <div className="space-y-5">
-
-          {/* Called toggle */}
           <div className="card p-5">
             <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Contact Status</h3>
             <button onClick={() => setCalled(!called)}
@@ -343,7 +346,6 @@ export default function ClientDetail() {
             </button>
           </div>
 
-          {/* Reviewed toggle */}
           <div className="card p-5">
             <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Review Status</h3>
             <button onClick={() => setReviewed(!reviewed)}
@@ -352,7 +354,6 @@ export default function ClientDetail() {
             </button>
           </div>
 
-          {/* Status */}
           <div className="card p-5">
             <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Status</h3>
             <div className="space-y-2">
@@ -365,7 +366,6 @@ export default function ClientDetail() {
             </div>
           </div>
 
-          {/* Follow up */}
           <div className="card p-5">
             <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Follow-up Date</h3>
             <input type="date" value={followUp} onChange={e => setFollowUp(e.target.value)}
@@ -377,7 +377,6 @@ export default function ClientDetail() {
             )}
           </div>
 
-          {/* Save button */}
           <button onClick={handleSave} disabled={saving}
             className={`w-full py-3 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 ${saved ? 'bg-forest-500 text-white' : 'bg-gray-900 hover:bg-gray-800 text-white'}`}>
             <Save size={14} />
