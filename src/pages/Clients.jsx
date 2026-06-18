@@ -43,14 +43,24 @@ function hasNotes(client) {
 }
 
 export default function Clients() {
-  const [search, setSearch]     = useState('')
-  const [filter, setFilter]     = useState('all')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [search, setSearch]     = useState(searchParams.get('q') || '')
+  const [filter, setFilter]     = useState(searchParams.get('filter') || 'all')
   const [clients, setClients]   = useState([])
   const [loading, setLoading]   = useState(true)
-  const [sortKey, setSortKey]   = useState('name')
-  const [sortDir, setSortDir]   = useState('asc')
-  const [searchParams]          = useSearchParams()
+  const [sortKey, setSortKey]   = useState(searchParams.get('sort') || 'name')
+  const [sortDir, setSortDir]   = useState(searchParams.get('dir') || 'asc')
   const navigate                = useNavigate()
+
+  // Keep the URL in sync so filter/sort/search survive navigating into a client and back
+  useEffect(() => {
+    const params = {}
+    if (filter !== 'all') params.filter = filter
+    if (search) params.q = search
+    if (sortKey !== 'name') params.sort = sortKey
+    if (sortDir !== 'asc') params.dir = sortDir
+    setSearchParams(params, { replace: true })
+  }, [filter, search, sortKey, sortDir])
 
   const [showAdd, setShowAdd]   = useState(false)
   const [adding, setAdding]     = useState(false)
@@ -88,8 +98,6 @@ export default function Clients() {
   }
 
   useEffect(() => {
-    const f = searchParams.get('filter')
-    if (f) setFilter(f)
     fetchClients()
   }, [])
 

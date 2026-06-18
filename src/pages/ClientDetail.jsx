@@ -143,7 +143,7 @@ export default function ClientDetail() {
   if (loading) return <div className="p-10 text-center text-forest-400">Loading...</div>
   if (!client) return (
     <div className="p-10 text-center text-forest-400">
-      Client not found. <button onClick={() => navigate('/clients')} className="underline">Go back</button>
+      Client not found. <button onClick={() => navigate(-1)} className="underline">Go back</button>
     </div>
   )
 
@@ -181,7 +181,7 @@ export default function ClientDetail() {
 
   return (
     <div className="p-6 lg:p-10 max-w-4xl mx-auto animate-fade-up">
-      <button onClick={() => navigate('/clients')} className="btn-ghost mb-6 -ml-2 text-forest-500/70">
+      <button onClick={() => navigate(-1)} className="btn-ghost mb-6 -ml-2 text-forest-500/70">
         <ArrowLeft size={15} /> Back to clients
       </button>
 
