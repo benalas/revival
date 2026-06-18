@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Globe, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react'
+import { Search, ChevronRight, ChevronUp, ChevronDown, Plus, X } from 'lucide-react'
 import { OUTCOME_CONFIG } from '../data'
 import { supabase } from '../supabase'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -9,8 +9,9 @@ const FILTERS = [
   { key: 'fire',     label: '🔥 Priority' },
   { key: 'warm',     label: '🟡 Follow Up' },
   { key: 'archive',  label: '✅ Closed' },
-  { key: 'spanish',  label: '🇪🇸 Spanish' },
   { key: 'reviewed', label: '👁 Reviewed' },
+  { key: 'worked',   label: '📝 Worked On' },
+  { key: 'manual',   label: '✏️ New Leads' },
   { key: 'dnc',      label: '🚫 Do Not Call' },
 ]
 
@@ -22,6 +23,25 @@ const COLUMNS = [
   { key: 'app_date',     label: 'Applied' },
 ]
 
+// Parse most recent note date for a client (for "Worked On" sorting)
+function lastNoteDate(client) {
+  if (!client.note_history) return null
+  try {
+    const history = JSON.parse(client.note_history)
+    const valid = history.filter(n => n && n.date)
+    if (valid.length === 0) return null
+    return new Date(Math.max(...valid.map(n => new Date(n.date))))
+  } catch { return null }
+}
+
+function hasNotes(client) {
+  if (!client.note_history) return false
+  try {
+    const history = JSON.parse(client.note_history)
+    return Array.isArray(history) && history.some(n => n && n.text)
+  } catch { return false }
+}
+
 export default function Clients() {
   const [search, setSearch]     = useState('')
   const [filter, setFilter]     = useState('all')
@@ -31,6 +51,41 @@ export default function Clients() {
   const [sortDir, setSortDir]   = useState('asc')
   const [searchParams]          = useSearchParams()
   const navigate                = useNavigate()
+
+  const [showAdd, setShowAdd]   = useState(false)
+  const [adding, setAdding]     = useState(false)
+  const [form, setForm]         = useState({
+    name: '', phone: '', address: '', income: '', credit_score: '', loan_amount: '', outcome: 'unknown'
+  })
+
+  async function handleAddClient() {
+    if (!form.name.trim()) return
+    setAdding(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    const priority = form.outcome === 'preapproval' ? 'fire'
+      : ['denied','incomplete'].includes(form.outcome) ? 'warm'
+      : form.outcome === 'closed' ? 'archive' : 'unknown'
+    const { data, error } = await supabase.from('clients').insert({
+      name: form.name.trim(),
+      phone: form.phone || null,
+      address: form.address || null,
+      income: form.income || null,
+      credit_score: form.credit_score ? parseInt(form.credit_score) : null,
+      loan_amount: form.loan_amount || null,
+      outcome: form.outcome,
+      priority,
+      source: 'manual',
+      called: false,
+      reviewed: false,
+      user_id: user?.id,
+    }).select().single()
+    setAdding(false)
+    if (!error && data) {
+      setShowAdd(false)
+      setForm({ name: '', phone: '', address: '', income: '', credit_score: '', loan_amount: '', outcome: 'unknown' })
+      navigate(`/clients/${data.id}`)
+    }
+  }
 
   useEffect(() => {
     const f = searchParams.get('filter')
@@ -54,7 +109,7 @@ export default function Clients() {
     }
   }
 
-  const filtered = clients
+  let filtered = clients
     .filter(c => {
       const matchSearch =
         c.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -65,20 +120,29 @@ export default function Clients() {
         filter === 'fire'     ? c.priority === 'fire' :
         filter === 'warm'     ? c.priority === 'warm' :
         filter === 'archive'  ? c.outcome === 'closed' :
-        filter === 'spanish'  ? c.spanish :
         filter === 'reviewed' ? c.reviewed :
-        filter === 'dnc'      ? c.outcome === 'dnc' : true
+        filter === 'worked'   ? hasNotes(c) :
+        filter === 'dnc'      ? c.outcome === 'dnc' :
+        filter === 'manual'   ? c.source === 'manual' : true
       return matchSearch && matchFilter
     })
-    .sort((a, b) => {
+
+  // Worked On sorts by most recent note unless user picked another column
+  if (filter === 'worked' && sortKey === 'name') {
+    filtered = filtered.sort((a, b) => {
+      const da = lastNoteDate(a), db = lastNoteDate(b)
+      if (!da && !db) return 0
+      if (!da) return 1
+      if (!db) return -1
+      return db - da
+    })
+  } else {
+    filtered = filtered.sort((a, b) => {
       let aVal = a[sortKey]
       let bVal = b[sortKey]
-
-      // Handle nulls — push to bottom always
       if (aVal == null && bVal == null) return 0
       if (aVal == null) return 1
       if (bVal == null) return -1
-
       if (sortKey === 'credit_score') {
         aVal = parseInt(aVal) || 0
         bVal = parseInt(bVal) || 0
@@ -89,11 +153,11 @@ export default function Clients() {
         aVal = aVal.toString().toLowerCase()
         bVal = bVal.toString().toLowerCase()
       }
-
       if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
       if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
       return 0
     })
+  }
 
   const SortIcon = ({ colKey }) => {
     if (sortKey !== colKey) return <ChevronUp size={12} className="text-forest-300/50" />
@@ -109,6 +173,10 @@ export default function Clients() {
           <h1 className="font-display text-4xl text-forest-700">Client Database</h1>
           <p className="text-sm text-forest-500/70 mt-1">{loading ? '...' : `${clients.length} clients`}</p>
         </div>
+        <button onClick={() => setShowAdd(true)}
+          className="flex items-center gap-1.5 px-4 py-2.5 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium rounded-xl transition-colors flex-shrink-0">
+          <Plus size={15} /> Add Client
+        </button>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 mb-6 animate-fade-up animate-delay-100">
@@ -131,7 +199,6 @@ export default function Clients() {
       </div>
 
       <div className="card overflow-hidden animate-fade-up animate-delay-200">
-        {/* Sortable column headers */}
         <div className="hidden lg:grid grid-cols-[2.5fr_1.2fr_1fr_1.2fr_1fr_0.5fr] gap-4 px-6 py-3 bg-cream-100/60 border-b border-cream-200">
           {COLUMNS.map(col => (
             <button key={col.key} onClick={() => handleSort(col.key)}
@@ -139,7 +206,7 @@ export default function Clients() {
               {col.label} <SortIcon colKey={col.key} />
             </button>
           ))}
-          <span className="text-xs font-medium text-forest-500/60 uppercase tracking-wider"></span>
+          <span></span>
         </div>
 
         {loading && <div className="py-20 text-center text-sm text-forest-400">Loading clients...</div>}
@@ -152,26 +219,24 @@ export default function Clients() {
         )}
 
         {!loading && filtered.length === 0 && clients.length > 0 && (
-          <div className="py-20 text-center text-sm text-forest-400">No clients match this search.</div>
+          <div className="py-20 text-center text-sm text-forest-400">No clients match this filter.</div>
         )}
 
         {!loading && filtered.map(client => {
           const outcome = OUTCOME_CONFIG[client.outcome] || OUTCOME_CONFIG.unknown
           const isDnc = client.outcome === 'dnc'
+          const isReviewed = client.reviewed
           return (
             <div key={client.id} onClick={() => navigate(`/clients/${client.id}`)}
-              className={`grid lg:grid-cols-[2.5fr_1.2fr_1fr_1.2fr_1fr_0.5fr] gap-4 px-6 py-4 border-b border-cream-100 last:border-0 hover:bg-cream-50/80 cursor-pointer transition-colors items-center ${isDnc ? 'opacity-50' : ''}`}>
+              className={`grid lg:grid-cols-[2.5fr_1.2fr_1fr_1.2fr_1fr_0.5fr] gap-4 px-6 py-3.5 border-b border-cream-100 last:border-0 cursor-pointer transition-colors items-center
+                ${isDnc ? 'opacity-50' : ''}
+                ${isReviewed ? 'bg-forest-400/8 border-l-4 border-l-forest-500 hover:bg-forest-400/12' : 'hover:bg-cream-50/80'}`}>
               <div className="flex items-center gap-3 min-w-0">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-display text-sm ${client.priority === 'fire' ? 'bg-rust-400/15 text-rust-500' : 'bg-forest-400/10 text-forest-600'}`}>
                   {client.name?.charAt(0)}
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className={`text-sm font-medium text-forest-700 ${isDnc ? 'line-through' : ''}`}>{client.name}</span>
-                    {client.spanish && <span className="text-xs bg-forest-400/10 text-forest-500 border border-forest-400/20 px-1.5 py-0.5 rounded-full flex items-center gap-0.5"><Globe size={9}/> ES</span>}
-                    {client.reviewed && <span className="text-xs bg-forest-400/10 text-forest-500 border border-forest-400/20 px-1.5 py-0.5 rounded-full">✓</span>}
-                    {isDnc && <span className="text-xs bg-rust-400/10 text-rust-500 border border-rust-400/20 px-1.5 py-0.5 rounded-full">🚫 DNC</span>}
-                  </div>
+                  <span className={`text-sm font-medium text-forest-700 ${isDnc ? 'line-through' : ''}`}>{client.name}</span>
                   <p className="text-xs text-forest-500/50 truncate">{client.address || '—'}</p>
                 </div>
               </div>
@@ -197,6 +262,79 @@ export default function Clients() {
       <p className="text-xs text-center text-forest-400/50 mt-4">
         Showing {filtered.length} of {clients.length} clients
       </p>
+
+      {/* Add Client Modal */}
+      {showAdd && (
+        <div className="fixed inset-0 bg-forest-900/40 flex items-center justify-center p-4 z-50"
+          onClick={() => setShowAdd(false)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl animate-fade-up"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-display text-2xl text-forest-700">Add New Client</h2>
+              <button onClick={() => setShowAdd(false)} className="text-forest-400 hover:text-forest-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Name *</label>
+                <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+                  placeholder="John Arias" className="input mt-1" autoFocus />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Phone</label>
+                  <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
+                    placeholder="516-555-1234" className="input mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Credit Score</label>
+                  <input value={form.credit_score} onChange={e => setForm({ ...form, credit_score: e.target.value })}
+                    placeholder="690" className="input mt-1" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Address</label>
+                <input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })}
+                  placeholder="123 Main St, Town, NY" className="input mt-1" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Annual Income</label>
+                  <input value={form.income} onChange={e => setForm({ ...form, income: e.target.value })}
+                    placeholder="$65,000" className="input mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Loan Amount</label>
+                  <input value={form.loan_amount} onChange={e => setForm({ ...form, loan_amount: e.target.value })}
+                    placeholder="$350,000" className="input mt-1" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Status</label>
+                <select value={form.outcome} onChange={e => setForm({ ...form, outcome: e.target.value })}
+                  className="input mt-1">
+                  {Object.entries(OUTCOME_CONFIG).map(([key, cfg]) => (
+                    <option key={key} value={key}>{cfg.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 mt-5">
+              <button onClick={handleAddClient} disabled={adding || !form.name.trim()}
+                className="flex-1 py-2.5 bg-forest-600 hover:bg-forest-700 disabled:opacity-40 text-white text-sm font-medium rounded-xl transition-colors">
+                {adding ? 'Adding...' : 'Add Client'}
+              </button>
+              <button onClick={() => setShowAdd(false)}
+                className="px-4 py-2.5 bg-cream-200 hover:bg-cream-300 text-forest-600 text-sm font-medium rounded-xl transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
