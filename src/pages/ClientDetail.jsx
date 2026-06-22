@@ -21,6 +21,7 @@ export default function ClientDetail() {
 
   const [status, setStatus]     = useState('')
   const [followUp, setFollowUp] = useState('')
+  const [followUpDone, setFollowUpDone] = useState(false)
   const [called, setCalled]     = useState(false)
   const [reviewed, setReviewed] = useState(false)
 
@@ -98,6 +99,25 @@ export default function ClientDetail() {
     setNoteHistory(updated)
     setEditingNoteIndex(null)
     setEditingNoteText('')
+  }
+
+  async function handleFollowUpDone() {
+    const today = new Date()
+    const entry = {
+      text: `Followed up (reminder was set for ${new Date(followUp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})`,
+      date: today.toISOString(),
+      author: currentUser?.email || 'Unknown'
+    }
+    const updatedNotes = [entry, ...noteHistory]
+    await supabase.from('clients').update({
+      note_history: JSON.stringify(updatedNotes),
+      notes: entry.text,
+      follow_up: null,
+    }).eq('id', id)
+    setNoteHistory(updatedNotes)
+    setFollowUp('')
+    setFollowUpDone(true)
+    setTimeout(() => setFollowUpDone(false), 2500)
   }
 
   async function handleSave() {
@@ -371,9 +391,15 @@ export default function ClientDetail() {
             <input type="date" value={followUp} onChange={e => setFollowUp(e.target.value)}
               className="input text-sm" />
             {followUp && (
-              <p className="text-xs text-forest-500 mt-2">
-                Reminder set for {new Date(followUp).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-              </p>
+              <>
+                <p className="text-xs text-forest-500 mt-2">
+                  Reminder set for {new Date(followUp).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                </p>
+                <button onClick={handleFollowUpDone} disabled={followUpDone}
+                  className="w-full mt-3 py-2 rounded-xl text-sm font-medium border border-forest-300 text-forest-600 hover:bg-forest-400/10 transition-all">
+                  {followUpDone ? '✓ Follow-up Logged' : '✓ Mark Follow-up Done'}
+                </button>
+              </>
             )}
           </div>
 
