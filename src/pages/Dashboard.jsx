@@ -29,7 +29,6 @@ export default function Dashboard() {
 
     // Get last login time from user metadata
     const lastLogin = user.last_sign_in_at
-    if (!lastLogin) return
 
     // Find all clients with notes added after last login by someone else
     const { data: allClients } = await supabase
@@ -46,7 +45,7 @@ export default function Dashboard() {
         const recentByOther = history.filter(n =>
           n && n.date && n.author &&
           n.author !== user.email &&
-          new Date(n.date) > new Date(lastLogin)
+          n.notify === user.email
         )
         if (recentByOther.length > 0) {
           newNotes.push({

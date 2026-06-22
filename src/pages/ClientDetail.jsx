@@ -4,6 +4,12 @@ import { ArrowLeft, Globe, Save, Mail, Edit2, Check, X, FileText, Plus, Clock, T
 import { OUTCOME_CONFIG } from '../data'
 import { supabase } from '../supabase'
 
+// Team members — add new people here as they're added in Supabase
+const TEAM = [
+  { id: 'e28182f3-527a-4bd5-a591-9de7eeecce3d', email: 'balas@nmbnow.com' },
+  { id: '071c2666-5a63-468a-a635-bebe6ebe7d25', email: 'johnz@nmbnow.com' },
+]
+
 export default function ClientDetail() {
   const { id }    = useParams()
   const navigate  = useNavigate()
@@ -16,6 +22,7 @@ export default function ClientDetail() {
   const [noteHistory, setNoteHistory] = useState([])
   const [newNote, setNewNote]         = useState('')
   const [savingNote, setSavingNote]   = useState(false)
+  const [notifyTarget, setNotifyTarget] = useState('')
   const [editingNoteIndex, setEditingNoteIndex] = useState(null)
   const [editingNoteText, setEditingNoteText]   = useState('')
 
@@ -75,12 +82,14 @@ export default function ClientDetail() {
     const entry = {
       text: newNote.trim(),
       date: new Date().toISOString(),
-      author: currentUser?.email || 'Unknown'
+      author: currentUser?.email || 'Unknown',
+      notify: notifyTarget || null
     }
     const updated = [entry, ...noteHistory]
     await persistNotes(updated)
     setNoteHistory(updated)
     setNewNote('')
+    setNotifyTarget('')
     setSavingNote(false)
   }
 
@@ -293,13 +302,22 @@ export default function ClientDetail() {
                 placeholder="Add a new note — call outcomes, next steps, anything relevant..."
                 className="input resize-none mb-2"
               />
-              <button
-                onClick={handleSaveNote}
-                disabled={savingNote || !newNote.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-40 text-white text-sm font-medium rounded-xl transition-colors">
-                <Plus size={14} />
-                {savingNote ? 'Saving...' : 'Save Note'}
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleSaveNote}
+                  disabled={savingNote || !newNote.trim()}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-forest-600 hover:bg-forest-700 disabled:opacity-40 text-white text-sm font-medium rounded-xl transition-colors">
+                  <Plus size={14} />
+                  {savingNote ? 'Saving...' : 'Save Note'}
+                </button>
+                <select value={notifyTarget} onChange={e => setNotifyTarget(e.target.value)}
+                  className="input text-sm py-2 w-auto">
+                  <option value="">No notification</option>
+                  {TEAM.filter(m => m.email !== currentUser?.email).map(m => (
+                    <option key={m.id} value={m.email}>Notify {m.email}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {noteHistory.length > 0 && (
@@ -313,6 +331,9 @@ export default function ClientDetail() {
                         <span className="font-medium text-forest-500">{entry.author || 'Unknown'}</span>
                         <span>·</span>
                         {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        {entry.notify && (
+                          <span className="ml-1 text-forest-600 bg-forest-400/10 border border-forest-400/20 px-1.5 py-0.5 rounded-full">→ {entry.notify}</span>
+                        )}
                       </div>
                       {editingNoteIndex !== i && (
                         <div className="flex items-center gap-2">
