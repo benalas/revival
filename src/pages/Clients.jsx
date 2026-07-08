@@ -12,6 +12,7 @@ const FILTERS = [
   { key: 'reviewed', label: '👁 Reviewed' },
   { key: 'worked',   label: '📝 Worked On' },
   { key: 'manual',   label: '✏️ New Leads' },
+  { key: 'notint',   label: '✕ Not Interested' },
   { key: 'dnc',      label: '🚫 Do Not Call' },
 ]
 
@@ -131,7 +132,8 @@ export default function Clients() {
         filter === 'reviewed' ? c.reviewed :
         filter === 'worked'   ? hasNotes(c) :
         filter === 'dnc'      ? c.outcome === 'dnc' :
-        filter === 'manual'   ? c.source === 'manual' : true
+        filter === 'manual'   ? c.source === 'manual' :
+        filter === 'notint'   ? c.not_interested : true
       return matchSearch && matchFilter
     })
 
@@ -188,11 +190,11 @@ export default function Clients() {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 mb-6 animate-fade-up animate-delay-100">
-        <div className="relative flex-1">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-forest-400" />
+        <div className="relative w-full sm:w-72 flex-shrink-0">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-forest-400 pointer-events-none" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search by name, phone, or address..."
-            className="input pl-9" />
+            className="input pl-9 w-full" />
         </div>
         <div className="flex gap-1.5 flex-wrap">
           {FILTERS.map(f => (
@@ -234,11 +236,15 @@ export default function Clients() {
           const outcome = OUTCOME_CONFIG[client.outcome] || OUTCOME_CONFIG.unknown
           const isDnc = client.outcome === 'dnc'
           const isReviewed = client.reviewed
+          const isNotInterested = client.not_interested
+          let rowStyle = 'hover:bg-cream-50/80'
+          if (isNotInterested) rowStyle = 'bg-rust-400/8 border-l-4 border-l-rust-400 hover:bg-rust-400/12'
+          else if (isReviewed) rowStyle = 'bg-forest-400/8 border-l-4 border-l-forest-500 hover:bg-forest-400/12'
           return (
             <div key={client.id} onClick={() => navigate(`/clients/${client.id}`)}
               className={`grid lg:grid-cols-[2.5fr_1.2fr_1fr_1.2fr_1fr_0.5fr] gap-4 px-6 py-3.5 border-b border-cream-100 last:border-0 cursor-pointer transition-colors items-center
                 ${isDnc ? 'opacity-50' : ''}
-                ${isReviewed ? 'bg-forest-400/8 border-l-4 border-l-forest-500 hover:bg-forest-400/12' : 'hover:bg-cream-50/80'}`}>
+                ${rowStyle}`}>
               <div className="flex items-center gap-3 min-w-0">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-display text-sm ${client.priority === 'fire' ? 'bg-rust-400/15 text-rust-500' : 'bg-forest-400/10 text-forest-600'}`}>
                   {client.name?.charAt(0)}

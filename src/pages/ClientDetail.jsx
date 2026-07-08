@@ -31,6 +31,7 @@ export default function ClientDetail() {
   const [followUpDone, setFollowUpDone] = useState(false)
   const [called, setCalled]     = useState(false)
   const [reviewed, setReviewed] = useState(false)
+  const [notInterested, setNotInterested] = useState(false)
 
   const [editName, setEditName]   = useState(false)
   const [editPhone, setEditPhone] = useState(false)
@@ -57,6 +58,7 @@ export default function ClientDetail() {
       setFollowUp(data.follow_up || '')
       setCalled(data.called || false)
       setReviewed(data.reviewed || false)
+      setNotInterested(data.not_interested || false)
       setNameVal(data.name || '')
       setPhoneVal(data.phone || '')
 
@@ -136,6 +138,7 @@ export default function ClientDetail() {
       follow_up: followUp || null,
       called,
       reviewed,
+      not_interested: notInterested,
       priority: status === 'preapproval' ? 'fire' :
                 ['denied','incomplete'].includes(status) ? 'warm' :
                 status === 'closed' ? 'archive' : 'unknown',
@@ -393,6 +396,17 @@ export default function ClientDetail() {
               className={`w-full py-2.5 rounded-xl text-sm font-medium border transition-all ${reviewed ? 'bg-forest-500 text-white border-forest-500' : 'bg-white text-forest-600 border-cream-200 hover:border-forest-300'}`}>
               {reviewed ? '✓ Reviewed' : 'Mark as Reviewed'}
             </button>
+          </div>
+
+          <div className="card p-5">
+            <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Interest</h3>
+            <button onClick={() => setNotInterested(!notInterested)}
+              className={`w-full py-2.5 rounded-xl text-sm font-medium border transition-all ${notInterested ? 'bg-rust-400 text-white border-rust-400' : 'bg-white text-forest-600 border-cream-200 hover:border-rust-300'}`}>
+              {notInterested ? '✕ Not Interested' : 'Mark Not Interested'}
+            </button>
+            {notInterested && (
+              <p className="text-xs text-forest-500/60 mt-2">Passed for now — revisit later. Their status is preserved.</p>
+            )}
           </div>
 
           <div className="card p-5">
