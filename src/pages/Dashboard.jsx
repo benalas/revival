@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Flame, TrendingUp, Archive, Globe, ChevronRight, Phone, Clock } from 'lucide-react'
+import { Star, Eye, X, Users, ChevronRight, Clock } from 'lucide-react'
 import { supabase } from '../supabase'
 import { useNavigate } from 'react-router-dom'
 import { OUTCOME_CONFIG } from '../data'
@@ -67,24 +67,9 @@ export default function Dashboard() {
     setLoading(false)
   }
 
-  const fire    = clients.filter(c => c.priority === 'fire')
-  const warm    = clients.filter(c => c.priority === 'warm')
-  const archive = clients.filter(c => c.outcome === 'closed')
-  const spanish = clients.filter(c => c.spanish)
-
-  const fireReviewed  = fire.filter(c => c.reviewed).length
-  const fireRemaining = fire.length - fireReviewed
-  const firePercent   = fire.length ? Math.round((fireReviewed / fire.length) * 100) : 0
-
-  // Follow-ups due today or overdue
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const dueTodayOrOverdue = clients.filter(c => {
-    if (!c.follow_up) return false
-    const d = new Date(c.follow_up)
-    d.setHours(0, 0, 0, 0)
-    return d <= today
-  }).sort((a, b) => new Date(a.follow_up) - new Date(b.follow_up))
+  const hot         = clients.filter(c => c.hot_lead)
+  const reviewed    = clients.filter(c => c.reviewed)
+  const notInterested = clients.filter(c => c.not_interested)
 
   // Recent activity — clients with notes, sorted by most recent note date
   const recentActivity = clients
@@ -103,40 +88,40 @@ export default function Dashboard() {
 
   const stats = [
     {
-      label: 'Priority Leads',
-      value: fire.length,
-      icon: Flame,
-      color: 'text-rust-500',
-      bg: 'bg-rust-400/10',
-      border: 'border-rust-400/20',
-      filter: 'fire',
-    },
-    {
-      label: 'Follow Up',
-      value: warm.length,
-      icon: TrendingUp,
+      label: 'Hot Leads',
+      value: hot.length,
+      icon: Star,
       color: 'text-gold-500',
       bg: 'bg-gold-400/10',
       border: 'border-gold-300/20',
-      filter: 'warm',
+      filter: 'hot',
     },
     {
-      label: 'Closed — Archive',
-      value: archive.length,
-      icon: Archive,
+      label: 'Reviewed',
+      value: reviewed.length,
+      icon: Eye,
       color: 'text-forest-500',
       bg: 'bg-forest-400/10',
       border: 'border-forest-400/20',
-      filter: 'archive',
+      filter: 'reviewed',
     },
     {
-      label: 'Spanish Speaking',
-      value: spanish.length,
-      icon: Globe,
+      label: 'Not Interested',
+      value: notInterested.length,
+      icon: X,
+      color: 'text-rust-500',
+      bg: 'bg-rust-400/10',
+      border: 'border-rust-400/20',
+      filter: 'notint',
+    },
+    {
+      label: 'Total Clients',
+      value: clients.length,
+      icon: Users,
       color: 'text-forest-500',
       bg: 'bg-forest-400/10',
       border: 'border-forest-400/20',
-      filter: 'spanish',
+      filter: 'all',
     },
   ]
 
@@ -193,75 +178,7 @@ export default function Dashboard() {
         })}
       </div>
 
-      {/* Priority progress bar */}
-      {!loading && fire.length > 0 && (
-        <div className="card p-5 mb-8 animate-fade-up animate-delay-200">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-sm font-medium text-forest-700">🔥 Priority Lead Progress</p>
-              <p className="text-xs text-forest-500/60 mt-0.5">
-                {fireReviewed} reviewed · {fireRemaining} remaining · {firePercent}% done
-              </p>
-            </div>
-            <span className="text-2xl font-display text-forest-700">{firePercent}%</span>
-          </div>
-          <div className="w-full bg-cream-200 rounded-full h-2">
-            <div
-              className="bg-forest-500 h-2 rounded-full transition-all duration-500"
-              style={{ width: `${firePercent}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      <div className="grid lg:grid-cols-2 gap-6 mb-8">
-
-        {/* Due today / overdue follow-ups */}
-        <div className="animate-fade-up animate-delay-200">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="font-display text-2xl text-forest-700">📅 Follow-ups Due</h2>
-              <p className="text-xs text-forest-500/70 mt-0.5">
-                {dueTodayOrOverdue.length === 0 ? 'Nothing due today' : `${dueTodayOrOverdue.length} client${dueTodayOrOverdue.length > 1 ? 's' : ''} need attention`}
-              </p>
-            </div>
-          </div>
-          <div className="card overflow-hidden">
-            {loading && <div className="py-10 text-center text-sm text-forest-400">Loading...</div>}
-            {!loading && dueTodayOrOverdue.length === 0 && (
-              <div className="py-10 text-center">
-                <p className="text-sm font-medium text-forest-700 mb-1">All caught up! 🎉</p>
-                <p className="text-xs text-forest-400">No follow-ups due today</p>
-              </div>
-            )}
-            {!loading && dueTodayOrOverdue.slice(0, 5).map(client => {
-              const due = new Date(client.follow_up)
-              due.setHours(0, 0, 0, 0)
-              const isOverdue = due < today
-              return (
-                <div key={client.id} onClick={() => navigate(`/clients/${client.id}`)}
-                  className="flex items-center gap-4 px-5 py-3.5 border-b border-cream-100 last:border-0 hover:bg-cream-50/80 cursor-pointer transition-colors">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-display text-sm ${isOverdue ? 'bg-rust-400/15 text-rust-500' : 'bg-gold-400/15 text-gold-600'}`}>
-                    {client.name?.charAt(0)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-forest-700">{client.name}</p>
-                    <p className="text-xs text-forest-500/60">{client.phone || 'No phone'}</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className={`text-xs font-medium ${isOverdue ? 'text-rust-500' : 'text-gold-500'}`}>
-                      {isOverdue ? 'Overdue' : 'Today'}
-                    </p>
-                    <p className="text-xs text-forest-400">
-                      {new Date(client.follow_up).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </p>
-                  </div>
-                  <ChevronRight size={14} className="text-forest-400/40 flex-shrink-0" />
-                </div>
-              )
-            })}
-          </div>
-        </div>
+      <div className="mb-8">
 
         {/* Recent activity */}
         <div className="animate-fade-up animate-delay-300">
@@ -301,37 +218,36 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Priority clients */}
+      {/* Hot leads */}
       <div className="animate-fade-up animate-delay-300">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="font-display text-2xl text-forest-700">🔥 Priority Outreach</h2>
-            <p className="text-xs text-forest-500/70 mt-0.5">Preapprovals that never closed — call these first</p>
+            <h2 className="font-display text-2xl text-forest-700">⭐ Hot Leads</h2>
+            <p className="text-xs text-forest-500/70 mt-0.5">Your highest-potential files — prioritize these</p>
           </div>
-          <button onClick={() => navigate('/clients?filter=fire')} className="btn-ghost text-xs">
+          <button onClick={() => navigate('/clients?filter=hot')} className="btn-ghost text-xs">
             See all <ChevronRight size={13} />
           </button>
         </div>
         <div className="card overflow-hidden">
           {loading && <div className="py-12 text-center text-sm text-forest-400">Loading...</div>}
-          {!loading && fire.length === 0 && (
+          {!loading && hot.length === 0 && (
             <div className="py-12 text-center">
-              <p className="text-sm font-medium text-forest-700 mb-1">No priority leads yet</p>
-              <p className="text-xs text-forest-400">Run the Python script to populate your database</p>
+              <p className="text-sm font-medium text-forest-700 mb-1">No hot leads yet</p>
+              <p className="text-xs text-forest-400">Mark promising files as Hot Leads to see them here</p>
             </div>
           )}
-          {!loading && fire.slice(0, 6).map(client => {
+          {!loading && hot.slice(0, 6).map(client => {
             const outcome = OUTCOME_CONFIG[client.outcome] || OUTCOME_CONFIG.unknown
             return (
               <div key={client.id} onClick={() => navigate(`/clients/${client.id}`)}
                 className="flex items-center gap-4 px-6 py-4 border-b border-cream-100 last:border-0 hover:bg-cream-50/80 cursor-pointer transition-colors">
-                <div className="w-9 h-9 rounded-full bg-rust-400/15 flex items-center justify-center flex-shrink-0 font-display text-rust-500 text-sm">
+                <div className="w-9 h-9 rounded-full bg-gold-400/15 flex items-center justify-center flex-shrink-0 font-display text-gold-600 text-sm">
                   {client.name?.charAt(0)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-forest-700">{client.name}</span>
-                    {client.spanish && <span className="text-xs bg-forest-400/10 text-forest-500 border border-forest-400/20 px-1.5 py-0.5 rounded-full">ES</span>}
                     {client.hot_lead && <span className="text-xs bg-gold-400/15 text-gold-600 border border-gold-300/30 px-1.5 py-0.5 rounded-full">⭐ Hot</span>}
                     {client.reviewed && <span className="text-xs bg-forest-400/10 text-forest-500 border border-forest-400/20 px-1.5 py-0.5 rounded-full">✓ Reviewed</span>}
                   </div>

@@ -6,12 +6,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 
 const FILTERS = [
   { key: 'all',      label: 'All Clients' },
-  { key: 'fire',     label: '🔥 Priority' },
   { key: 'hot',      label: '⭐ Hot Leads' },
-  { key: 'warm',     label: '🟡 Follow Up' },
-  { key: 'archive',  label: '✅ Closed' },
   { key: 'reviewed', label: '👁 Reviewed' },
-  { key: 'worked',   label: '📝 Worked On' },
   { key: 'manual',   label: '✏️ New Leads' },
   { key: 'notint',   label: '✕ Not Interested' },
   { key: 'dnc',      label: '🚫 Do Not Call' },
@@ -24,25 +20,6 @@ const COLUMNS = [
   { key: 'outcome',      label: 'Outcome' },
   { key: 'app_date',     label: 'Applied' },
 ]
-
-// Parse most recent note date for a client (for "Worked On" sorting)
-function lastNoteDate(client) {
-  if (!client.note_history) return null
-  try {
-    const history = JSON.parse(client.note_history)
-    const valid = history.filter(n => n && n.date)
-    if (valid.length === 0) return null
-    return new Date(Math.max(...valid.map(n => new Date(n.date))))
-  } catch { return null }
-}
-
-function hasNotes(client) {
-  if (!client.note_history) return false
-  try {
-    const history = JSON.parse(client.note_history)
-    return Array.isArray(history) && history.some(n => n && n.text)
-  } catch { return false }
-}
 
 export default function Clients() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -126,29 +103,15 @@ export default function Clients() {
         c.address?.toLowerCase().includes(search.toLowerCase())
       const matchFilter =
         filter === 'all'      ? true :
-        filter === 'fire'     ? c.priority === 'fire' :
         filter === 'hot'      ? c.hot_lead :
-        filter === 'warm'     ? c.priority === 'warm' :
-        filter === 'archive'  ? c.outcome === 'closed' :
         filter === 'reviewed' ? c.reviewed :
-        filter === 'worked'   ? hasNotes(c) :
         filter === 'dnc'      ? c.outcome === 'dnc' :
         filter === 'manual'   ? c.source === 'manual' :
         filter === 'notint'   ? c.not_interested : true
       return matchSearch && matchFilter
     })
 
-  // Worked On sorts by most recent note unless user picked another column
-  if (filter === 'worked' && sortKey === 'name') {
-    filtered = filtered.sort((a, b) => {
-      const da = lastNoteDate(a), db = lastNoteDate(b)
-      if (!da && !db) return 0
-      if (!da) return 1
-      if (!db) return -1
-      return db - da
-    })
-  } else {
-    filtered = filtered.sort((a, b) => {
+  filtered = filtered.sort((a, b) => {
       let aVal = a[sortKey]
       let bVal = b[sortKey]
       if (aVal == null && bVal == null) return 0
@@ -168,7 +131,6 @@ export default function Clients() {
       if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-  }
 
   const SortIcon = ({ colKey }) => {
     if (sortKey !== colKey) return <ChevronUp size={12} className="text-forest-300/50" />
@@ -249,7 +211,7 @@ export default function Clients() {
                 ${isDnc ? 'opacity-50' : ''}
                 ${rowStyle}`}>
               <div className="flex items-center gap-3 min-w-0">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-display text-sm ${client.priority === 'fire' ? 'bg-rust-400/15 text-rust-500' : 'bg-forest-400/10 text-forest-600'}`}>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-display text-sm bg-forest-400/10 text-forest-600">
                   {client.name?.charAt(0)}
                 </div>
                 <div className="min-w-0">
