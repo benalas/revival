@@ -1,0 +1,321 @@
+import { useState, useEffect } from 'react'
+import { Search, ChevronRight, ChevronUp, ChevronDown, Plus, X } from 'lucide-react'
+import { OUTCOME_CONFIG } from '../data'
+import { supabase } from '../supabase'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+
+const FILTERS = [
+  { key: 'all',      label: 'All Clients' },
+  { key: 'hot',      label: '⭐ Hot Leads' },
+  { key: 'reviewed', label: '👁 Reviewed' },
+  { key: 'manual',   label: '✏️ New Leads' },
+  { key: 'notint',   label: '✕ Not Interested' },
+  { key: 'dnc',      label: '🚫 Do Not Call' },
+]
+
+const COLUMNS = [
+  { key: 'name',         label: 'Client' },
+  { key: 'phone',        label: 'Phone' },
+  { key: 'credit_score', label: 'Credit Score' },
+  { key: 'outcome',      label: 'Outcome' },
+  { key: 'app_date',     label: 'Applied' },
+]
+
+export default function Clients() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [search, setSearch]     = useState(searchParams.get('q') || '')
+  const [filter, setFilter]     = useState(searchParams.get('filter') || 'all')
+  const [clients, setClients]   = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [sortKey, setSortKey]   = useState(searchParams.get('sort') || 'name')
+  const [sortDir, setSortDir]   = useState(searchParams.get('dir') || 'asc')
+  const navigate                = useNavigate()
+
+  // Keep the URL in sync so filter/sort/search survive navigating into a client and back
+  useEffect(() => {
+    const params = {}
+    if (filter !== 'all') params.filter = filter
+    if (search) params.q = search
+    if (sortKey !== 'name') params.sort = sortKey
+    if (sortDir !== 'asc') params.dir = sortDir
+    setSearchParams(params, { replace: true })
+  }, [filter, search, sortKey, sortDir])
+
+  const [showAdd, setShowAdd]   = useState(false)
+  const [adding, setAdding]     = useState(false)
+  const [form, setForm]         = useState({
+    name: '', phone: '', address: '', income: '', credit_score: '', loan_amount: '', outcome: 'unknown'
+  })
+
+  async function handleAddClient() {
+    if (!form.name.trim()) return
+    setAdding(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    const priority = form.outcome === 'preapproval' ? 'fire'
+      : ['denied','incomplete'].includes(form.outcome) ? 'warm'
+      : form.outcome === 'closed' ? 'archive' : 'unknown'
+    const { data, error } = await supabase.from('clients').insert({
+      name: form.name.trim(),
+      phone: form.phone || null,
+      address: form.address || null,
+      income: form.income || null,
+      credit_score: form.credit_score ? parseInt(form.credit_score) : null,
+      loan_amount: form.loan_amount || null,
+      outcome: form.outcome,
+      priority,
+      source: 'manual',
+      reviewed: false,
+      user_id: user?.id,
+    }).select().single()
+    setAdding(false)
+    if (!error && data) {
+      setShowAdd(false)
+      setForm({ name: '', phone: '', address: '', income: '', credit_score: '', loan_amount: '', outcome: 'unknown' })
+      navigate(`/clients/${data.id}`)
+    }
+  }
+
+  useEffect(() => {
+    fetchClients()
+  }, [])
+
+  async function fetchClients() {
+    setLoading(true)
+    const { data } = await supabase.from('clients').select('*')
+    setClients(data || [])
+    setLoading(false)
+  }
+
+  function handleSort(key) {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  let filtered = clients
+    .filter(c => {
+      const matchSearch =
+        c.name?.toLowerCase().includes(search.toLowerCase()) ||
+        c.phone?.includes(search) ||
+        c.address?.toLowerCase().includes(search.toLowerCase())
+      const matchFilter =
+        filter === 'all'      ? true :
+        filter === 'hot'      ? c.hot_lead :
+        filter === 'reviewed' ? c.reviewed :
+        filter === 'dnc'      ? c.outcome === 'dnc' :
+        filter === 'manual'   ? c.source === 'manual' :
+        filter === 'notint'   ? c.not_interested : true
+      return matchSearch && matchFilter
+    })
+
+  filtered = filtered.sort((a, b) => {
+      let aVal = a[sortKey]
+      let bVal = b[sortKey]
+      if (aVal == null && bVal == null) return 0
+      if (aVal == null) return 1
+      if (bVal == null) return -1
+      if (sortKey === 'credit_score') {
+        aVal = parseInt(aVal) || 0
+        bVal = parseInt(bVal) || 0
+      } else if (sortKey === 'app_date') {
+        aVal = new Date(aVal)
+        bVal = new Date(bVal)
+      } else {
+        aVal = aVal.toString().toLowerCase()
+        bVal = bVal.toString().toLowerCase()
+      }
+      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
+      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+
+  const SortIcon = ({ colKey }) => {
+    if (sortKey !== colKey) return <ChevronUp size={12} className="text-forest-300/50" />
+    return sortDir === 'asc'
+      ? <ChevronUp size={12} className="text-forest-500" />
+      : <ChevronDown size={12} className="text-forest-500" />
+  }
+
+  return (
+    <div className="p-6 lg:p-10 max-w-6xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8 animate-fade-up">
+        <div>
+          <h1 className="font-display text-4xl text-forest-700">Client Database</h1>
+          <p className="text-sm text-forest-500/70 mt-1">{loading ? '...' : `${clients.length} clients`}</p>
+        </div>
+        <button onClick={() => setShowAdd(true)}
+          className="flex items-center gap-1.5 px-4 py-2.5 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium rounded-xl transition-colors flex-shrink-0">
+          <Plus size={15} /> Add Client
+        </button>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3 mb-6 animate-fade-up animate-delay-100">
+        <div className="relative w-full sm:w-72 flex-shrink-0">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-forest-400 pointer-events-none" />
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search by name, phone, or address..."
+            className="input pl-9 w-full" />
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          {FILTERS.map(f => (
+            <button key={f.key} onClick={() => setFilter(f.key)}
+              className={`px-3 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
+                filter === f.key ? 'bg-forest-500 text-white shadow-sm' : 'bg-white/80 text-forest-600 border border-cream-200 hover:border-forest-300'
+              }`}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="card overflow-hidden animate-fade-up animate-delay-200">
+        <div className="hidden lg:grid grid-cols-[2.5fr_1.2fr_1fr_1.2fr_1fr_0.5fr] gap-4 px-6 py-3 bg-cream-100/60 border-b border-cream-200">
+          {COLUMNS.map(col => (
+            <button key={col.key} onClick={() => handleSort(col.key)}
+              className="flex items-center gap-1 text-xs font-medium text-forest-500/60 uppercase tracking-wider hover:text-forest-600 transition-colors text-left">
+              {col.label} <SortIcon colKey={col.key} />
+            </button>
+          ))}
+          <span></span>
+        </div>
+
+        {loading && <div className="py-20 text-center text-sm text-forest-400">Loading clients...</div>}
+
+        {!loading && clients.length === 0 && (
+          <div className="py-20 text-center">
+            <p className="text-sm font-medium text-forest-700 mb-2">No clients yet</p>
+            <p className="text-xs text-forest-400">Run the Python script to populate your database</p>
+          </div>
+        )}
+
+        {!loading && filtered.length === 0 && clients.length > 0 && (
+          <div className="py-20 text-center text-sm text-forest-400">No clients match this filter.</div>
+        )}
+
+        {!loading && filtered.map(client => {
+          const outcome = OUTCOME_CONFIG[client.outcome] || OUTCOME_CONFIG.unknown
+          const isDnc = client.outcome === 'dnc'
+          const isReviewed = client.reviewed
+          const isNotInterested = client.not_interested
+          const isHot = client.hot_lead
+          let rowStyle = 'hover:bg-cream-50/80'
+          if (isHot) rowStyle = 'bg-gold-400/12 border-l-4 border-l-gold-400 hover:bg-gold-400/18'
+          else if (isNotInterested) rowStyle = 'bg-rust-400/8 border-l-4 border-l-rust-400 hover:bg-rust-400/12'
+          else if (isReviewed) rowStyle = 'bg-forest-400/8 border-l-4 border-l-forest-500 hover:bg-forest-400/12'
+          return (
+            <div key={client.id} onClick={() => navigate(`/clients/${client.id}`)}
+              className={`grid lg:grid-cols-[2.5fr_1.2fr_1fr_1.2fr_1fr_0.5fr] gap-4 px-6 py-3.5 border-b border-cream-100 last:border-0 cursor-pointer transition-colors items-center
+                ${isDnc ? 'opacity-50' : ''}
+                ${rowStyle}`}>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-display text-sm bg-forest-400/10 text-forest-600">
+                  {client.name?.charAt(0)}
+                </div>
+                <div className="min-w-0">
+                  <span className={`text-sm font-medium text-forest-700 ${isDnc ? 'line-through' : ''}`}>
+                    {isHot && <span className="mr-1">⭐</span>}{client.name}
+                  </span>
+                  <p className="text-xs text-forest-500/50 truncate">{client.address || '—'}</p>
+                </div>
+              </div>
+              <div className="hidden lg:block text-sm text-forest-700 font-medium">{client.phone || '—'}</div>
+              <div className="hidden lg:block">
+                <span className={`text-sm font-medium ${client.credit_score >= 660 ? 'text-forest-600' : client.credit_score >= 620 ? 'text-gold-500' : 'text-rust-500'}`}>
+                  {client.credit_score || '—'}
+                </span>
+              </div>
+              <div className="hidden lg:block">
+                <span className={`badge ${outcome.badge}`}>{outcome.label}</span>
+              </div>
+              <div className="hidden lg:block text-xs text-forest-500/60">
+                {client.app_date ? new Date(client.app_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+              </div>
+              <div className="flex justify-end">
+                <ChevronRight size={14} className="text-forest-400/40" />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <p className="text-xs text-center text-forest-400/50 mt-4">
+        Showing {filtered.length} of {clients.length} clients
+      </p>
+
+      {/* Add Client Modal */}
+      {showAdd && (
+        <div className="fixed inset-0 bg-forest-900/40 flex items-center justify-center p-4 z-50"
+          onClick={() => setShowAdd(false)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl animate-fade-up"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-display text-2xl text-forest-700">Add New Client</h2>
+              <button onClick={() => setShowAdd(false)} className="text-forest-400 hover:text-forest-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Name *</label>
+                <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+                  placeholder="John Arias" className="input mt-1" autoFocus />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Phone</label>
+                  <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
+                    placeholder="516-555-1234" className="input mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Credit Score</label>
+                  <input value={form.credit_score} onChange={e => setForm({ ...form, credit_score: e.target.value })}
+                    placeholder="690" className="input mt-1" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Address</label>
+                <input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })}
+                  placeholder="123 Main St, Town, NY" className="input mt-1" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Annual Income</label>
+                  <input value={form.income} onChange={e => setForm({ ...form, income: e.target.value })}
+                    placeholder="$65,000" className="input mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Loan Amount</label>
+                  <input value={form.loan_amount} onChange={e => setForm({ ...form, loan_amount: e.target.value })}
+                    placeholder="$350,000" className="input mt-1" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Status</label>
+                <select value={form.outcome} onChange={e => setForm({ ...form, outcome: e.target.value })}
+                  className="input mt-1">
+                  {Object.entries(OUTCOME_CONFIG).map(([key, cfg]) => (
+                    <option key={key} value={key}>{cfg.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 mt-5">
+              <button onClick={handleAddClient} disabled={adding || !form.name.trim()}
+                className="flex-1 py-2.5 bg-forest-600 hover:bg-forest-700 disabled:opacity-40 text-white text-sm font-medium rounded-xl transition-colors">
+                {adding ? 'Adding...' : 'Add Client'}
+              </button>
+              <button onClick={() => setShowAdd(false)}
+                className="px-4 py-2.5 bg-cream-200 hover:bg-cream-300 text-forest-600 text-sm font-medium rounded-xl transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
