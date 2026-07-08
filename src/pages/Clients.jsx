@@ -152,12 +152,12 @@ export default function Clients() {
         </button>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 mb-6 animate-fade-up animate-delay-100">
-        <div className="relative w-full sm:w-72 flex-shrink-0">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-forest-400 pointer-events-none" />
+      <div className="flex flex-col sm:flex-row sm:items-start gap-3 mb-6 animate-fade-up animate-delay-100">
+        <div className="relative w-full sm:w-72 flex-shrink-0 h-[42px]">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-forest-400 pointer-events-none z-10" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search by name, phone, or address..."
-            className="input pl-9 w-full" />
+            className="input pl-9 w-full h-full" />
         </div>
         <div className="flex gap-1.5 flex-wrap">
           {FILTERS.map(f => (
