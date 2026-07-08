@@ -72,9 +72,9 @@ export default function Dashboard() {
   const archive = clients.filter(c => c.outcome === 'closed')
   const spanish = clients.filter(c => c.spanish)
 
-  const fireCalled    = fire.filter(c => c.called).length
-  const fireRemaining = fire.length - fireCalled
-  const firePercent   = fire.length ? Math.round((fireCalled / fire.length) * 100) : 0
+  const fireReviewed  = fire.filter(c => c.reviewed).length
+  const fireRemaining = fire.length - fireReviewed
+  const firePercent   = fire.length ? Math.round((fireReviewed / fire.length) * 100) : 0
 
   // Follow-ups due today or overdue
   const today = new Date()
@@ -200,7 +200,7 @@ export default function Dashboard() {
             <div>
               <p className="text-sm font-medium text-forest-700">🔥 Priority Lead Progress</p>
               <p className="text-xs text-forest-500/60 mt-0.5">
-                {fireCalled} called · {fireRemaining} remaining · {firePercent}% done
+                {fireReviewed} reviewed · {fireRemaining} remaining · {firePercent}% done
               </p>
             </div>
             <span className="text-2xl font-display text-forest-700">{firePercent}%</span>
@@ -332,7 +332,8 @@ export default function Dashboard() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-forest-700">{client.name}</span>
                     {client.spanish && <span className="text-xs bg-forest-400/10 text-forest-500 border border-forest-400/20 px-1.5 py-0.5 rounded-full">ES</span>}
-                    {client.called && <span className="text-xs bg-forest-400/10 text-forest-500 border border-forest-400/20 px-1.5 py-0.5 rounded-full">✓ Called</span>}
+                    {client.hot_lead && <span className="text-xs bg-gold-400/15 text-gold-600 border border-gold-300/30 px-1.5 py-0.5 rounded-full">⭐ Hot</span>}
+                    {client.reviewed && <span className="text-xs bg-forest-400/10 text-forest-500 border border-forest-400/20 px-1.5 py-0.5 rounded-full">✓ Reviewed</span>}
                   </div>
                   <p className="text-xs text-forest-500/60 mt-0.5">{client.phone || client.address || 'No contact info'}</p>
                 </div>

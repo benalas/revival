@@ -7,6 +7,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 const FILTERS = [
   { key: 'all',      label: 'All Clients' },
   { key: 'fire',     label: '🔥 Priority' },
+  { key: 'hot',      label: '⭐ Hot Leads' },
   { key: 'warm',     label: '🟡 Follow Up' },
   { key: 'archive',  label: '✅ Closed' },
   { key: 'reviewed', label: '👁 Reviewed' },
@@ -86,7 +87,6 @@ export default function Clients() {
       outcome: form.outcome,
       priority,
       source: 'manual',
-      called: false,
       reviewed: false,
       user_id: user?.id,
     }).select().single()
@@ -127,6 +127,7 @@ export default function Clients() {
       const matchFilter =
         filter === 'all'      ? true :
         filter === 'fire'     ? c.priority === 'fire' :
+        filter === 'hot'      ? c.hot_lead :
         filter === 'warm'     ? c.priority === 'warm' :
         filter === 'archive'  ? c.outcome === 'closed' :
         filter === 'reviewed' ? c.reviewed :
@@ -237,8 +238,10 @@ export default function Clients() {
           const isDnc = client.outcome === 'dnc'
           const isReviewed = client.reviewed
           const isNotInterested = client.not_interested
+          const isHot = client.hot_lead
           let rowStyle = 'hover:bg-cream-50/80'
-          if (isNotInterested) rowStyle = 'bg-rust-400/8 border-l-4 border-l-rust-400 hover:bg-rust-400/12'
+          if (isHot) rowStyle = 'bg-gold-400/12 border-l-4 border-l-gold-400 hover:bg-gold-400/18'
+          else if (isNotInterested) rowStyle = 'bg-rust-400/8 border-l-4 border-l-rust-400 hover:bg-rust-400/12'
           else if (isReviewed) rowStyle = 'bg-forest-400/8 border-l-4 border-l-forest-500 hover:bg-forest-400/12'
           return (
             <div key={client.id} onClick={() => navigate(`/clients/${client.id}`)}
@@ -250,7 +253,9 @@ export default function Clients() {
                   {client.name?.charAt(0)}
                 </div>
                 <div className="min-w-0">
-                  <span className={`text-sm font-medium text-forest-700 ${isDnc ? 'line-through' : ''}`}>{client.name}</span>
+                  <span className={`text-sm font-medium text-forest-700 ${isDnc ? 'line-through' : ''}`}>
+                    {isHot && <span className="mr-1">⭐</span>}{client.name}
+                  </span>
                   <p className="text-xs text-forest-500/50 truncate">{client.address || '—'}</p>
                 </div>
               </div>

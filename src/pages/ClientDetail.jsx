@@ -29,9 +29,9 @@ export default function ClientDetail() {
   const [status, setStatus]     = useState('')
   const [followUp, setFollowUp] = useState('')
   const [followUpDone, setFollowUpDone] = useState(false)
-  const [called, setCalled]     = useState(false)
   const [reviewed, setReviewed] = useState(false)
   const [notInterested, setNotInterested] = useState(false)
+  const [hotLead, setHotLead] = useState(false)
 
   const [editName, setEditName]   = useState(false)
   const [editPhone, setEditPhone] = useState(false)
@@ -56,9 +56,9 @@ export default function ClientDetail() {
       setClient(data)
       setStatus(data.outcome || 'unknown')
       setFollowUp(data.follow_up || '')
-      setCalled(data.called || false)
       setReviewed(data.reviewed || false)
       setNotInterested(data.not_interested || false)
+      setHotLead(data.hot_lead || false)
       setNameVal(data.name || '')
       setPhoneVal(data.phone || '')
 
@@ -136,9 +136,9 @@ export default function ClientDetail() {
     await supabase.from('clients').update({
       outcome:   status,
       follow_up: followUp || null,
-      called,
       reviewed,
       not_interested: notInterested,
+      hot_lead: hotLead,
       priority: status === 'preapproval' ? 'fire' :
                 ['denied','incomplete'].includes(status) ? 'warm' :
                 status === 'closed' ? 'archive' : 'unknown',
@@ -383,11 +383,14 @@ export default function ClientDetail() {
 
         <div className="space-y-5">
           <div className="card p-5">
-            <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Contact Status</h3>
-            <button onClick={() => setCalled(!called)}
-              className={`w-full py-2.5 rounded-xl text-sm font-medium border transition-all ${called ? 'bg-forest-500 text-white border-forest-500' : 'bg-white text-forest-600 border-cream-200 hover:border-forest-300'}`}>
-              {called ? '✓ Called' : 'Mark as Called'}
+            <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Opportunity</h3>
+            <button onClick={() => setHotLead(!hotLead)}
+              className={`w-full py-2.5 rounded-xl text-sm font-medium border transition-all ${hotLead ? 'bg-gold-400 text-white border-gold-400' : 'bg-white text-forest-600 border-cream-200 hover:border-gold-300'}`}>
+              {hotLead ? '⭐ Hot Lead' : 'Mark as Hot Lead'}
             </button>
+            {hotLead && (
+              <p className="text-xs text-forest-500/60 mt-2">High-potential file worth prioritizing.</p>
+            )}
           </div>
 
           <div className="card p-5">
