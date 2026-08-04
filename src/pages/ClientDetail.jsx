@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Globe, Save, Mail, Edit2, Check, X, FileText, Plus, Clock, Trash2 } from 'lucide-react'
-import { OUTCOME_CONFIG } from '../data'
 import { supabase } from '../supabase'
 
 // Team members — add new people here as they're added in Supabase
@@ -26,11 +25,11 @@ export default function ClientDetail() {
   const [editingNoteIndex, setEditingNoteIndex] = useState(null)
   const [editingNoteText, setEditingNoteText]   = useState('')
 
-  const [status, setStatus]     = useState('')
   const [followUp, setFollowUp] = useState('')
   const [followUpDone, setFollowUpDone] = useState(false)
   const [reviewed, setReviewed] = useState(false)
   const [notInterested, setNotInterested] = useState(false)
+  const [dnc, setDnc] = useState(false)
   const [hotLead, setHotLead] = useState(false)
 
   const [editName, setEditName]   = useState(false)
@@ -54,10 +53,10 @@ export default function ClientDetail() {
     const { data } = await supabase.from('clients').select('*').eq('id', id).single()
     if (data) {
       setClient(data)
-      setStatus(data.outcome || 'unknown')
       setFollowUp(data.follow_up || '')
       setReviewed(data.reviewed || false)
       setNotInterested(data.not_interested || false)
+      setDnc(data.outcome === 'dnc')
       setHotLead(data.hot_lead || false)
       setNameVal(data.name || '')
       setPhoneVal(data.phone || '')
@@ -74,8 +73,10 @@ export default function ClientDetail() {
   async function persistNotes(updated) {
     await supabase.from('clients').update({
       note_history: JSON.stringify(updated),
-      notes: updated[0]?.text || ''
+      notes: updated[0]?.text || '',
+      reviewed: true
     }).eq('id', id)
+    setReviewed(true)
   }
 
   async function handleSaveNote() {
@@ -134,14 +135,11 @@ export default function ClientDetail() {
   async function handleSave() {
     setSaving(true)
     await supabase.from('clients').update({
-      outcome:   status,
       follow_up: followUp || null,
       reviewed,
       not_interested: notInterested,
       hot_lead: hotLead,
-      priority: status === 'preapproval' ? 'fire' :
-                ['denied','incomplete'].includes(status) ? 'warm' :
-                status === 'closed' ? 'archive' : 'unknown',
+      outcome: dnc ? 'dnc' : (client.outcome === 'dnc' ? 'unknown' : client.outcome),
     }).eq('id', id)
     setSaving(false)
     setSaved(true)
@@ -384,7 +382,7 @@ export default function ClientDetail() {
         <div className="space-y-5">
           <div className="card p-5">
             <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Opportunity</h3>
-            <button onClick={() => setHotLead(!hotLead)}
+            <button onClick={() => { setHotLead(!hotLead); setReviewed(true) }}
               className={`w-full py-2.5 rounded-xl text-sm font-medium border transition-all ${hotLead ? 'bg-gold-400 text-white border-gold-400' : 'bg-white text-forest-600 border-cream-200 hover:border-gold-300'}`}>
               {hotLead ? '⭐ Hot Lead' : 'Mark as Hot Lead'}
             </button>
@@ -394,34 +392,25 @@ export default function ClientDetail() {
           </div>
 
           <div className="card p-5">
-            <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Review Status</h3>
-            <button onClick={() => setReviewed(!reviewed)}
-              className={`w-full py-2.5 rounded-xl text-sm font-medium border transition-all ${reviewed ? 'bg-forest-500 text-white border-forest-500' : 'bg-white text-forest-600 border-cream-200 hover:border-forest-300'}`}>
-              {reviewed ? '✓ Reviewed' : 'Mark as Reviewed'}
-            </button>
-          </div>
-
-          <div className="card p-5">
             <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Interest</h3>
-            <button onClick={() => setNotInterested(!notInterested)}
+            <button onClick={() => { setNotInterested(!notInterested); setReviewed(true) }}
               className={`w-full py-2.5 rounded-xl text-sm font-medium border transition-all ${notInterested ? 'bg-rust-400 text-white border-rust-400' : 'bg-white text-forest-600 border-cream-200 hover:border-rust-300'}`}>
               {notInterested ? '✕ Not Interested' : 'Mark Not Interested'}
             </button>
             {notInterested && (
-              <p className="text-xs text-forest-500/60 mt-2">Passed for now — revisit later. Their status is preserved.</p>
+              <p className="text-xs text-forest-500/60 mt-2">Passed for now — revisit later.</p>
             )}
           </div>
 
           <div className="card p-5">
-            <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Status</h3>
-            <div className="space-y-2">
-              {Object.entries(OUTCOME_CONFIG).map(([key, cfg]) => (
-                <button key={key} onClick={() => setStatus(key)}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-sm border transition-all ${status === key ? 'bg-forest-500 text-white border-forest-500' : 'bg-white text-forest-600 border-cream-200 hover:border-forest-300'}`}>
-                  {cfg.label}
-                </button>
-              ))}
-            </div>
+            <h3 className="text-xs font-medium text-forest-500/60 uppercase tracking-wider mb-3">Do Not Call</h3>
+            <button onClick={() => { setDnc(!dnc); setReviewed(true) }}
+              className={`w-full py-2.5 rounded-xl text-sm font-medium border transition-all ${dnc ? 'bg-forest-700 text-white border-forest-700' : 'bg-white text-forest-600 border-cream-200 hover:border-forest-400'}`}>
+              {dnc ? '🚫 Do Not Call' : 'Mark Do Not Call'}
+            </button>
+            {dnc && (
+              <p className="text-xs text-forest-500/60 mt-2">Removed from active outreach.</p>
+            )}
           </div>
 
           <div className="card p-5">

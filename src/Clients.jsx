@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { Search, ChevronRight, ChevronUp, ChevronDown, Plus, X } from 'lucide-react'
-import { OUTCOME_CONFIG } from '../data'
 import { supabase } from '../supabase'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -17,7 +16,6 @@ const COLUMNS = [
   { key: 'name',         label: 'Client' },
   { key: 'phone',        label: 'Phone' },
   { key: 'credit_score', label: 'Credit Score' },
-  { key: 'outcome',      label: 'Outcome' },
   { key: 'app_date',     label: 'Applied' },
 ]
 
@@ -152,12 +150,12 @@ export default function Clients() {
         </button>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 mb-6 animate-fade-up animate-delay-100">
-        <div className="relative w-full sm:w-72 flex-shrink-0">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-forest-400 pointer-events-none" />
+      <div className="flex flex-col sm:flex-row sm:items-start gap-3 mb-6 animate-fade-up animate-delay-100">
+        <div className="relative w-full sm:w-72 flex-shrink-0 h-[42px]">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-forest-400 pointer-events-none z-10" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search by name, phone, or address..."
-            className="input pl-9 w-full" />
+            className="input pl-9 w-full h-full" />
         </div>
         <div className="flex gap-1.5 flex-wrap">
           {FILTERS.map(f => (
@@ -172,7 +170,7 @@ export default function Clients() {
       </div>
 
       <div className="card overflow-hidden animate-fade-up animate-delay-200">
-        <div className="hidden lg:grid grid-cols-[2.5fr_1.2fr_1fr_1.2fr_1fr_0.5fr] gap-4 px-6 py-3 bg-cream-100/60 border-b border-cream-200">
+        <div className="hidden lg:grid grid-cols-[2.5fr_1.2fr_1fr_1fr_0.5fr] gap-4 px-6 py-3 bg-cream-100/60 border-b border-cream-200">
           {COLUMNS.map(col => (
             <button key={col.key} onClick={() => handleSort(col.key)}
               className="flex items-center gap-1 text-xs font-medium text-forest-500/60 uppercase tracking-wider hover:text-forest-600 transition-colors text-left">
@@ -196,7 +194,6 @@ export default function Clients() {
         )}
 
         {!loading && filtered.map(client => {
-          const outcome = OUTCOME_CONFIG[client.outcome] || OUTCOME_CONFIG.unknown
           const isDnc = client.outcome === 'dnc'
           const isReviewed = client.reviewed
           const isNotInterested = client.not_interested
@@ -207,7 +204,7 @@ export default function Clients() {
           else if (isReviewed) rowStyle = 'bg-forest-400/8 border-l-4 border-l-forest-500 hover:bg-forest-400/12'
           return (
             <div key={client.id} onClick={() => navigate(`/clients/${client.id}`)}
-              className={`grid lg:grid-cols-[2.5fr_1.2fr_1fr_1.2fr_1fr_0.5fr] gap-4 px-6 py-3.5 border-b border-cream-100 last:border-0 cursor-pointer transition-colors items-center
+              className={`grid lg:grid-cols-[2.5fr_1.2fr_1fr_1fr_0.5fr] gap-4 px-6 py-3.5 border-b border-cream-100 last:border-0 cursor-pointer transition-colors items-center
                 ${isDnc ? 'opacity-50' : ''}
                 ${rowStyle}`}>
               <div className="flex items-center gap-3 min-w-0">
@@ -226,9 +223,6 @@ export default function Clients() {
                 <span className={`text-sm font-medium ${client.credit_score >= 660 ? 'text-forest-600' : client.credit_score >= 620 ? 'text-gold-500' : 'text-rust-500'}`}>
                   {client.credit_score || '—'}
                 </span>
-              </div>
-              <div className="hidden lg:block">
-                <span className={`badge ${outcome.badge}`}>{outcome.label}</span>
               </div>
               <div className="hidden lg:block text-xs text-forest-500/60">
                 {client.app_date ? new Date(client.app_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
@@ -291,15 +285,6 @@ export default function Clients() {
                   <input value={form.loan_amount} onChange={e => setForm({ ...form, loan_amount: e.target.value })}
                     placeholder="$350,000" className="input mt-1" />
                 </div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-forest-500/60 uppercase tracking-wider">Status</label>
-                <select value={form.outcome} onChange={e => setForm({ ...form, outcome: e.target.value })}
-                  className="input mt-1">
-                  {Object.entries(OUTCOME_CONFIG).map(([key, cfg]) => (
-                    <option key={key} value={key}>{cfg.label}</option>
-                  ))}
-                </select>
               </div>
             </div>
 
